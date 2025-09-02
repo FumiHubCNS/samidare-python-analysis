@@ -21,6 +21,9 @@ import pathlib
 import sys
 from collections import defaultdict
 from collections import Counter
+import numpy as np
+import matplotlib.pyplot as plt
+from collections import Counter, defaultdict
 
 this_file_path = pathlib.Path(__file__).parent
 sys.path.append(str(this_file_path.parent.parent.parent / "src"))
@@ -88,6 +91,8 @@ def main(date, verbose, nmax):
 
     ch_all_waveforms = defaultdict(list)
 
+    plt.figure(figsize=(10, 6))
+
     for row in df.toLocalIterator():
         ts = row["timestamp"]
         sample = row["samples"]
@@ -102,45 +107,58 @@ def main(date, verbose, nmax):
         raw_signed = np.asarray(raw, dtype=np.int32) 
         baseline_signed = int(most_common[0])  
         y = raw_signed - baseline_signed
+        x = np.arange(len(y))
 
         ch_all_waveforms[id].append(y)
     
         if inum == nmax:
             break
         
-        inum = inum + 1
-
-
-    rows=11
-    cols=12
-    titles = []
-
-    plotnumflgs = [0] * 200
-
-    for i in range (rows*cols):
-        titles.append(f"Ch:{i}")
-
-    ref = ch_all_waveforms
+        if 1:
+            if inum > 0 and inum % 504 == 0: 
+                plt.title("Pulse Shape (all channels overlay)")
+                plt.xlabel("Sample index")
+                plt.ylabel("ADC - baseline")
+                plt.show(block=False)
+                plt.pause(1)
+                plt.close() 
+                plt.figure(figsize=(10, 6))
+            else:
+                plt.plot(x, y, lw=1, alpha=0.5, marker="o", markersize=2)
         
-    fig = make_subplots(rows=rows, cols=cols, subplot_titles=titles)
+        inum += 1
 
-    for ch, waveforms in ref.items():
-        for wf in waveforms:
-            row = (ch // cols) + 1
-            col = (ch % cols) + 1
-            x = np.arange(len(wf))
-            if row > rows or col > cols:
-                print(f"⚠️ ch={ch} → (row={row}, col={col}) は範囲外。スキップします")
-                continue
+    if 0:
+        rows=11
+        cols=12
+        titles = []
 
-            if plotnumflgs[ch] < 5:
-                fig.add_trace(go.Scatter(x= x, y= wf), row=row, col=col)
-            plotnumflgs[ch] += 1
+        plotnumflgs = [0] * 200
 
-    fig.update_layout(title = f"Pulse Shape (self-triger mode)", showlegend=False)
-    fig.update_annotations(font=dict(family="Helvetica", size=8))
-    fig.update_yaxes(range=[-400, 600])
-    fig.show()
+        for i in range (rows*cols):
+            titles.append(f"Ch:{i}")
+
+        ref = ch_all_waveforms
+            
+        fig = make_subplots(rows=rows, cols=cols, subplot_titles=titles)
+
+        for ch, waveforms in ref.items():
+            for wf in waveforms:
+                row = (ch // cols) + 1
+                col = (ch % cols) + 1
+                x = np.arange(len(wf))
+                if row > rows or col > cols:
+                    print(f"⚠️ ch={ch} → (row={row}, col={col}) は範囲外。スキップします")
+                    continue
+
+                if plotnumflgs[ch] < 5:
+                    fig.add_trace(go.Scatter(x= x, y= wf), row=row, col=col)
+                plotnumflgs[ch] += 1
+
+        fig.update_layout(title = f"Pulse Shape (self-triger mode)", showlegend=False)
+        fig.update_annotations(font=dict(family="Helvetica", size=8))
+        fig.update_yaxes(range=[-400, 600])
+        fig.show()
 
 if __name__ == '__main__':
     main()
