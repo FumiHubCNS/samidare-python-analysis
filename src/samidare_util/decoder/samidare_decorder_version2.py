@@ -188,17 +188,17 @@ if __name__ == "__main__":
     NUM_CHANNELS = format["num_channels"]# = 32
     MAX_NUM_SAMPLES = format["max_num_samples"]# = 64
 
+    fileinfo = config["fileinfo"]
 
-    base_input_path  = "/Users/fendo/Work/Data/root/sampa-minitpc-test/data2025"
-    input_file_dir   = "0919" 
-    input_file_name  = "20250919_test_pos_4mVfC_300ns_64sample_16presample_395thre_001"
-    base_output_path = "/Users/fendo/Work/Data/root/sampa-minitpc-test/output"
+    base_input_path  = fileinfo["base_input_path"] 
+    input_file_dir   = fileinfo["input_file_dir"]  
+    input_file_name  = fileinfo["input_file_name"]  
+    base_output_path = fileinfo["base_output_path"] 
 
-    OUTPUTPATH = "/Users/fendo/Work/Data/root/sampa-minitpc-test/output"
+    OUTPUTPATH = base_output_path
+    
     BASE = base_input_path + "/" + input_file_dir + "/"
     FILE = input_file_name + ".bin"
-
-
 
     DATA = BASE+FILE
     NAME = FILE.removesuffix(".bin")
