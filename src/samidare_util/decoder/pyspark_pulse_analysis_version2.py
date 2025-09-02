@@ -11,8 +11,23 @@ import sys
 this_file_path = pathlib.Path(__file__).parent
 sys.path.append(str(this_file_path.parent.parent.parent / "src"))
 
-import samidare_util.develop.chk_timestamp as ct
-
+def plot_timestamps_plotly(timestamps):
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        y=timestamps,
+        mode='lines+markers',
+        name='timestamp',
+        marker=dict(size=4),
+        line=dict(width=1)
+    ))
+    fig.update_layout(
+        title='Timestamps from Binary File',
+        xaxis_title='Event Index',
+        yaxis_title='Timestamp (48-bit)',
+        hovermode='x unified',
+        height=500
+    )
+    fig.show()
 
 def get_2darray_from_3darray(data3):
     data2 = [waveform for group in data3 for waveform in group]
@@ -464,7 +479,7 @@ def build_event_and_find_pulse(input, output, dt, debug=False):
             debug_timestamp =[]
             for i in range(len(filtered_grouped_timestamp)):
                 debug_timestamp.append(filtered_grouped_timestamp[i][0])
-            ct.plot_timestamps_plotly(debug_timestamp)
+            plot_timestamps_plotly(debug_timestamp)
 
 if __name__ == "__main__":
     toml_file_path = this_file_path  / "../../../parameters.toml"
