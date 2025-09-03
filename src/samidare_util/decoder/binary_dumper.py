@@ -17,13 +17,18 @@ sys.path.append(str(this_file_path.parent.parent.parent / "src"))
 def colorize(word: str, color_list) -> str:
     return f"{color_list[word]}{word}{"\x1b[0m"}" if word in color_list else word
 
-def dump_stream(path, cols=6, endian="big", chunk=4096, color_list=None, limit=None):
+def dump_stream(path, cols=6, endian="big", chunk=4096, color_list=None, limit=None, dump_offset="0"):
+    
+    if isinstance(dump_offset, str):
+        dump_offset = int(dump_offset, 16)
+
     with open(path, "rb") as f:
         col = 0
         leftover = b""
         total_read = 0  # バイト数カウンター
         previous_word = None
         fafa_mode = False  # ← 追加：fafa直後の処理フラグ
+        current_offset = 0
 
         while True:
             if limit is not None:
@@ -48,7 +53,12 @@ def dump_stream(path, cols=6, endian="big", chunk=4096, color_list=None, limit=N
                 leftover = b""
 
             for i in range(0, len(buf), 2):
+                if current_offset < dump_offset:
+                    current_offset += 2
+                    continue
+
                 w = buf[i:i+2]
+        
                 if endian == "little":
                     word = f"{w[1]:02x}{w[0]:02x}"
                 else:
@@ -57,6 +67,7 @@ def dump_stream(path, cols=6, endian="big", chunk=4096, color_list=None, limit=N
                 if word == "afaf":
                     if col != 0:
                         print()
+                    print(f"{current_offset:08x}: ", end=" ")
                     col = 0
 
                 if word == "fafa":
@@ -71,7 +82,10 @@ def dump_stream(path, cols=6, endian="big", chunk=4096, color_list=None, limit=N
                     continue  # 処理済みなので次へ
 
                 print(colorize(word, color_list), end=" ")
+                
                 col += 1
+                current_offset += 2
+                
                 if col >= cols:
                     print()
                     col = 0
@@ -90,13 +104,14 @@ def common_options(func):
     @click.option("--cols", '-c', type=int, default=6)
     @click.option("--endian", '-e', type=click.Choice(["little", "big"]), default="big")
     @click.option("--limit", '-l',type=int, default=None,help="ダンプする最大バイト数（未指定なら全体をダンプ）")
+    @click.option("--offset", '-o', type=str, default="0")
     def wrapper(*args, **kwargs):
         return func(*args, **kwargs)
     return wrapper
 
 @click.command(context_settings=dict(help_option_names=['-h', '--help']))
 @common_options
-def main(name, date, verbose, cols, endian, limit):
+def main(name, date, verbose, cols, endian, limit, offset):
     if verbose:
         click.echo(f"[VERBOSE MODE] Hello {name}, date: {date.strftime('%Y-%m-%d')}")
     else:
@@ -129,7 +144,7 @@ def main(name, date, verbose, cols, endian, limit):
 
     DATA = BASE+FILE
 
-    dump_stream(DATA, cols, endian, 4096, COLORS, limit)
+    dump_stream(DATA, cols, endian, 4096, COLORS, limit, offset)
 
 if __name__ == '__main__':
     main()
