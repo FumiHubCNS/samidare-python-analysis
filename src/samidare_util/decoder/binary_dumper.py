@@ -21,6 +21,7 @@ def dump_stream(path, cols=6, endian="big", chunk=4096, color_list=None, limit=N
     
     if isinstance(dump_offset, str):
         dump_offset = int(dump_offset, 16)
+        limit += dump_offset
 
     with open(path, "rb") as f:
         col = 0
