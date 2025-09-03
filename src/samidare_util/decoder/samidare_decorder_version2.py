@@ -80,6 +80,7 @@ def parse_binary_file_with_timestamp(filename, HEADER_MARKER, FOOTER_MARKER, HEA
         print(f"this method is excuted by debug mode. decoded data is not saved.")
 
     output_paths = []
+    outputfileblock = 500000 if maxloop == -1 else maxloop
 
     with open(filename, "rb") as f:
         data = f.read()
@@ -131,7 +132,7 @@ def parse_binary_file_with_timestamp(filename, HEADER_MARKER, FOOTER_MARKER, HEA
                     ])
 
                 if not debug:
-                    if len(raw_parquet_buffer) >= 500000:
+                    if len(raw_parquet_buffer) >= outputfileblock:#500000:
                         df = pd.DataFrame(raw_parquet_buffer, columns=["chip", "channel", "samples", "timestamp"])
                         df.to_parquet(f"{OUTPUTPATH}/{NAME}_{event_id:05d}.parquet", index=False)
                         print(f"write parquet to {OUTPUTPATH}/{NAME}_{event_id:05d}.parquet")

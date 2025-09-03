@@ -35,14 +35,17 @@ def common_options(func):
     # @click.option('--name', '-n', default='World', show_default=True, help='Your name')
     @click.option('--date', '-d', type=click.DateTime(formats=["%Y-%m-%d"]), default=lambda: datetime.datetime.now(), show_default=lambda: datetime.datetime.now().strftime("%Y-%m-%d"), help="Date in YYYY-MM-DD format")
     @click.option('--verbose', '-v', is_flag=True, help='verbose flag')
+    @click.option('--basesubtract', '-bs', is_flag=True, help='base line subtraction flag')
     @click.option('--nmax', '-n', type=int, help='maximum loop number',default=10000)
+    @click.option('--eventflag', '-ef', is_flag=True, help='flag for plot pulse event block by event block')                                                                                               
+    @click.option('--channelflag', '-cf', is_flag=True, help='flag for plot pulse with each channel')
     def wrapper(*args, **kwargs):
         return func(*args, **kwargs)
     return wrapper
 
 @click.command(context_settings=dict(help_option_names=['-h', '--help']))
 @common_options
-def main(date, verbose, nmax):
+def main(date, verbose,basesubtract, nmax, eventflag, channelflag):
     if verbose:
         click.echo(f"[VERBOSE MODE] date: {date.strftime('%Y-%m-%d')}")
     else:
@@ -81,7 +84,8 @@ def main(date, verbose, nmax):
     NAME = FILE.removesuffix(".bin")
 
     output_paths = samidare_decoder.parse_binary_file_with_timestamp( DATA, HEADER_MARKER, FOOTER_MARKER, \
-        HEADER_SIZE, TN_SIZE, FOOTER_SIZE, TIMESTAMP_SIZE, DATA_SIZE, NUM_CHANNELS, MAX_NUM_SAMPLES, OUTPUTPATH, NAME)
+        HEADER_SIZE, TN_SIZE, FOOTER_SIZE, TIMESTAMP_SIZE, DATA_SIZE, NUM_CHANNELS, MAX_NUM_SAMPLES, OUTPUTPATH, NAME,
+        nmax)
 
     ##### event building and pulse finding
     inum = 0
@@ -106,7 +110,7 @@ def main(date, verbose, nmax):
         most_common = counter.most_common(1)[0]  
         raw_signed = np.asarray(raw, dtype=np.int32) 
         baseline_signed = int(most_common[0])  
-        y = raw_signed - baseline_signed
+        y = raw_signed - baseline_signed if basesubtract else raw_signed
         x = np.arange(len(y))
 
         ch_all_waveforms[id].append(y)
@@ -114,7 +118,7 @@ def main(date, verbose, nmax):
         if inum == nmax:
             break
         
-        if 1:
+        if eventflag:
             if inum > 0 and inum % 504 == 0: 
                 plt.title("Pulse Shape (all channels overlay)")
                 plt.xlabel("Sample index")
@@ -128,7 +132,7 @@ def main(date, verbose, nmax):
         
         inum += 1
 
-    if 0:
+    if channelflag:
         rows=11
         cols=12
         titles = []
