@@ -22,6 +22,8 @@ def dump_stream(path, cols=6, endian="big", chunk=4096, color_list=None, limit=N
         col = 0
         leftover = b""
         total_read = 0  # バイト数カウンター
+        previous_word = None
+        fafa_mode = False  # ← 追加：fafa直後の処理フラグ
 
         while True:
             if limit is not None:
@@ -53,19 +55,26 @@ def dump_stream(path, cols=6, endian="big", chunk=4096, color_list=None, limit=N
                     word = f"{w[0]:02x}{w[1]:02x}"
 
                 if word == "afaf":
-                    # afafの直前で改行（ただし行頭ではしない）
                     if col != 0:
-                        print()  
+                        print()
                     col = 0
 
-                print(colorize(word, color_list), end="")
+                if word == "fafa":
+                    fafa_mode = True  # 次の1語を特別扱い
+                elif fafa_mode:
+                    print(f"{colorize(word, color_list)} ({int(word[0:2],16):>2}, {int(word[2:4],16):>3})", end=" ")  # 特別処理
+                    fafa_mode = False
+                    col += 1
+                    if col >= cols:
+                        print()
+                        col = 0
+                    continue  # 処理済みなので次へ
 
+                print(colorize(word, color_list), end=" ")
                 col += 1
                 if col >= cols:
                     print()
                     col = 0
-                else:
-                    print(" ", end="")
 
 
         if leftover and (limit is None or total_read < limit):
