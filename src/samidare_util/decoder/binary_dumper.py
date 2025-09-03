@@ -67,7 +67,8 @@ def dump_stream(path, cols=6, endian="big", chunk=4096, color_list=None, limit=N
                 if word == "afaf":
                     if col != 0:
                         print()
-                    print(f"{current_offset+2:08x}: ", end=" ")
+                        current_offset += 2
+                    print(f"{current_offset:08x}: ", end=" ")
                     col = 0
 
                 if word == "fafa":
@@ -78,6 +79,7 @@ def dump_stream(path, cols=6, endian="big", chunk=4096, color_list=None, limit=N
                     col += 1
                     if col >= cols:
                         print()
+                        current_offset += 2
                         col = 0
                     continue  # 処理済みなので次へ
 
@@ -88,7 +90,8 @@ def dump_stream(path, cols=6, endian="big", chunk=4096, color_list=None, limit=N
                 
                 if col >= cols:
                     print()
-                    print(f"{current_offset+2:08x}: ", end=" ")
+                    current_offset += 2
+                    print(f"{current_offset:08x}: ", end=" ")
                     col = 0
 
 
