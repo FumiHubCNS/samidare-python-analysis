@@ -25,11 +25,15 @@ from itertools import islice
 import matplotlib.pyplot as plt
 from statistics import mode
 import numpy as np
+import matplotlib.cm as cm
+import matplotlib.colors as mcolors
+from typing import Iterable, Union, List, Tuple
 
 this_file_path = pathlib.Path(__file__).parent
 sys.path.append(str(this_file_path.parent.parent.parent / "src"))
 
 Pair = Tuple[int, int]  # (pos, byte)
+Color = Tuple[float, float, float, float]  # RGBA (0..1)
 
 class ParquetAppender:
     def __init__(self, path: str):
@@ -58,6 +62,56 @@ class ParquetAppender:
 
     def close(self):
         self.writer.close()
+
+def _colors32(cmap: Union[str, mcolors.Colormap]) -> np.ndarray:
+    """
+    指定カラーマップから 32 色の RGBA テーブル (32,4) を返す。
+    ListedColormap でも LinearSegmentedColormap でも動く。
+    """
+    if isinstance(cmap, str):
+        # lut=32 で 32 色に量子化された colormap を取得
+        cmap = cm.get_cmap(cmap, 32)
+    # 連続/離散を問わず確実に RGBA テーブルを得る
+    table = cmap(np.linspace(0, 1, 32))  # shape (32, 4), 値は 0..1
+    return np.asarray(table)
+
+def color32(value: int,
+            cmap: Union[str, mcolors.Colormap] = "viridis",
+            *,
+            as_hex: bool = False,
+            clip: bool = False) -> Union[Color, str]:
+    """
+    0..31 の整数 value を 32色の離散カラーマップの色に対応させて返す。
+    - cmap: 'viridis', 'plasma', 'turbo', 'jet' など
+    - as_hex: True なら '#RRGGBB' を返す
+    - clip: 範囲外を 0..31 に丸める（False なら ValueError）
+    """
+    v = int(value)
+    if clip:
+        v = max(0, min(31, v))
+    elif not (0 <= v <= 31):
+        raise ValueError(f"value must be in [0,31], got {value}")
+
+    table = _colors32(cmap)           # (32, 4)
+    rgba = tuple(map(float, table[v]))  # ensure plain floats
+    return mcolors.to_hex(rgba) if as_hex else rgba
+
+def color32_many(values: Iterable[int],
+                 cmap: Union[str, mcolors.Colormap] = "viridis",
+                 *,
+                 as_hex: bool = False,
+                 clip: bool = False) -> List[Union[Color, str]]:
+    table = _colors32(cmap)
+    out = []
+    for value in values:
+        v = int(value)
+        if clip:
+            v = max(0, min(31, v))
+        elif not (0 <= v <= 31):
+            raise ValueError(f"value must be in [0,31], got {value}")
+        rgba = tuple(map(float, table[v]))
+        out.append(mcolors.to_hex(rgba) if as_hex else rgba)
+    return out
 
 def pack_many_inverted(*flags: bool) -> tuple[int, int]:
     """
@@ -428,11 +482,8 @@ def scan_stream(path: str, header, footer, timestamp1, timestamp2, timestamp3, c
                 else:
                     previous_event_block = event_block[len(event_block)-1]
                     current_event_block  = sample_build_data
-
-                    # 
-                    # print(previous_event_block['timestamp'][0], sample_build_data['timestamp'][0] , previous_event_block['timestamp'][0]- sample_build_data['timestamp'][0], sample_build_data['chip'], len(sample_build_data['timestamp']))
-
-                    if abs( current_event_block['timestamp'][0] - previous_event_block['timestamp'][0] ) < 500:
+                    
+                    if abs( current_event_block['timestamp'][0] - previous_event_block['timestamp'][0] ) < 50:
                         event_block.append(sample_build_data)
                     
                     else:
@@ -441,13 +492,19 @@ def scan_stream(path: str, header, footer, timestamp1, timestamp2, timestamp3, c
                         for data in event_block:
                             chip_number = data['chip']
                             sample_indices = data['sample_index']
+
+                            ich = 0
                             
                             for sample_values in data['sample_value']:
                                 baseline = np.array(mode(sample_values))
                                 x = np.array(sample_indices)
                                 y = np.array(sample_values) - baseline
-                                ax[chip_number].plot(x,y, lw=1, alpha=0.5, marker="o", markersize=2)
+                                ax[chip_number].plot(x, y, lw=1, alpha=0.5, marker="o", markersize=2, label=f"ch{ich}", color=color32(ich,"brg"))
+                                ich += 1
                         
+                        for i in range(4):
+                            ax[i].legend(loc='upper right', ncol=3, fontsize=6)
+
                         plt.show(block=False)   
                         plt.pause(0.01)   
 
