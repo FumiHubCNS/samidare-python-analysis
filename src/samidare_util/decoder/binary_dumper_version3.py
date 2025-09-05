@@ -35,32 +35,88 @@ sys.path.append(str(this_file_path.parent.parent.parent / "src"))
 Pair = Tuple[int, int]  # (pos, byte)
 Color = Tuple[float, float, float, float]  # RGBA (0..1)
 
-class ParquetAppender:
-    def __init__(self, path: str):
+
+class PulseParquetAppender:                    
+    # sample_build_data = {
+    #     "chip" : transposed_sample_block[3][0],
+    #     "timestamp": transposed_sample_block[2],
+    #     "sample_index":  transposed_sample_block[4],
+    #     "sample_value" : fadc_samples
+    #  }
+    def __init__(self, path: str, batch_rows: int = 8192):
+        self.schema = pa.schema([            
+            ("chip",          pa.int64()),              
+            ("timestamp", pa.list_(pa.int64())),
+            ("sample_index", pa.list_(pa.int64())),            
+            ("samples_value", pa.list_(pa.int64())) 
+        ])
+        self.writer = pq.ParquetWriter(path, self.schema, compression="zstd")
+        self.batch_rows = batch_rows
+        self._buf = {name: [] for name in self.schema.names}
+        self._n = 0
+
+    def _flush(self):
+        if self._n == 0:
+            return
+        arrays = []
+        for name, typ in zip(self.schema.names, self.schema.types):
+            vals = self._buf[name]
+            arrays.append(pa.array(vals, type=typ))
+        table = pa.Table.from_arrays(arrays, names=self.schema.names)
+        # 行をまとめて 1 つの RowGroup として書く
+        self.writer.write_table(table, row_group_size=self._n)
+        # バッファをクリア
+        self._buf = {name: [] for name in self.schema.names}
+        self._n = 0
+
+    def append(self, row: dict):
+        for name in self.schema.names:
+            self._buf[name].append(row.get(name))
+        self._n += 1
+        if self._n >= self.batch_rows:
+            self._flush()
+
+    def close(self):
+        self._flush()
+        self.writer.close()
+class SAMPADataParquetAppender:
+    def __init__(self, path: str, batch_rows: int = 8192):
         self.schema = pa.schema([
             ("data_block",    pa.int64()),
             ("error_level",   pa.int64()),
-            ("timestamp",     pa.int64()),                # epoch_ms を想定
-            ("chip",          pa.int64()),               # ← 文字列
-            ("sample_index",  pa.int64()),               # ← 文字列
-            ("samples_value", pa.list_(pa.int64())),      # ← リスト
+            ("timestamp",     pa.int64()),
+            ("chip",          pa.int64()),
+            ("sample_index",  pa.int64()),
+            ("samples_value", pa.list_(pa.int64())),
         ])
         self.writer = pq.ParquetWriter(path, self.schema, compression="zstd")
+        self.batch_rows = batch_rows
+        self._buf = {name: [] for name in self.schema.names}
+        self._n = 0
 
-    def append(self, row: dict):
+    def _flush(self):
+        if self._n == 0:
+            return
         arrays = []
         for name, typ in zip(self.schema.names, self.schema.types):
-            v = row.get(name)
-            if isinstance(typ, pa.lib.ListType):
-                # list 列
-                if v is None: arrays.append(pa.array([None], type=typ))
-                else:         arrays.append(pa.array([v],   type=typ))
-            else:
-                arrays.append(pa.array([v], type=typ))
-        batch = pa.record_batch(arrays, schema=self.schema)
-        self.writer.write_table(pa.Table.from_batches([batch]))
+            vals = self._buf[name]
+            arrays.append(pa.array(vals, type=typ))
+        table = pa.Table.from_arrays(arrays, names=self.schema.names)
+        # 行をまとめて 1 つの RowGroup として書く
+        self.writer.write_table(table, row_group_size=self._n)
+        # バッファをクリア
+        self._buf = {name: [] for name in self.schema.names}
+        self._n = 0
+
+    def append(self, row: dict):
+        for name in self.schema.names:
+            self._buf[name].append(row.get(name))
+        self._n += 1
+        if self._n >= self.batch_rows:
+            self._flush()
 
     def close(self):
+        self._flush()
         self.writer.close()
 
 def _colors32(cmap: Union[str, mcolors.Colormap]) -> np.ndarray:
@@ -382,8 +438,9 @@ def byte_to_hex_and_int(val: int):
         # ここでは再送出
         raise
 
-
-def scan_stream(path: str, header, footer, timestamp1, timestamp2, timestamp3, chunk, limit, max_gap_bytes=None, footer_search_limit=60, output=None, binary_checker_flag=False):
+def scan_stream(path: str, header, footer, timestamp1, timestamp2, timestamp3, 
+                chunk, limit, max_gap_bytes=None, footer_search_limit=60, 
+                output1=None, output2=None, binary_checker_flag=False, event_check_flag=False):
     """
     afaf(=header) 検出 → 直後60B以内で fafa(=footer) を2B境界で探索。
     見つかれば afaf直後2B と fafa直後2B を比較して一致なら確定出力。
@@ -391,15 +448,19 @@ def scan_stream(path: str, header, footer, timestamp1, timestamp2, timestamp3, c
     queued_head が無い場合のみ、次に現れた afaf で分割。
     """
 
-    if 1:
+    if event_check_flag:
         fig, axes = plt.subplots(2, 2, figsize=(8, 8), constrained_layout=True)
         ax = axes.ravel()    
 
         for i in range(4):
             ax[i].set_title(f"pulse @ chip{i}")
 
-    if output is not None:
-        logger = ParquetAppender(output)
+    if output1 is not None:
+        logger1 = SAMPADataParquetAppender(output1)
+
+    if output2 is not None:
+        logger2 = PulseParquetAppender(output2)
+
 
     COLORS = {
         "afaf": "\x1b[31m",  # red
@@ -437,15 +498,7 @@ def scan_stream(path: str, header, footer, timestamp1, timestamp2, timestamp3, c
     sample_block = []
     event_block = []
 
-    def sample_builder(sample_block: list = [], row: Dict = {}):
-        # row = {
-        #     "data_block": gap_size+2,0, x
-        #     "error_level": flag_debuger,1, x
-        #     "timestamp": timestamp,2, o
-        #     "chip": chip_number,3, o
-        #     "sample_index": sample_index,4, o 
-        #     "samples_value":vals, 5, o
-        # }
+    def sample_builder(sample_block: list = [], row: Dict = {}, event_data_check_flag: bool = False):
         current_data = list(row.values())
 
         # print(current_data)
@@ -474,7 +527,10 @@ def scan_stream(path: str, header, footer, timestamp1, timestamp2, timestamp3, c
                     "timestamp": transposed_sample_block[2],
                     "sample_index":  transposed_sample_block[4],
                     "sample_value" : fadc_samples
-                 }
+                }
+
+                if output2 is not None:
+                    logger2.append(sample_build_data)
 
                 if len(event_block) == 0:
                     event_block.append(sample_build_data)
@@ -489,31 +545,32 @@ def scan_stream(path: str, header, footer, timestamp1, timestamp2, timestamp3, c
                     else:
                         # print(f"len {len(event_block)}")
 
-                        for data in event_block:
-                            chip_number = data['chip']
-                            sample_indices = data['sample_index']
+                        if event_data_check_flag:
+                            for data in event_block:
+                                chip_number = data['chip']
+                                sample_indices = data['sample_index']
 
-                            ich = 0
+                                ich = 0
+                                
+                                for sample_values in data['sample_value']:
+                                    baseline = np.array(mode(sample_values))
+                                    x = np.array(sample_indices)
+                                    y = np.array(sample_values) - baseline
+                                    ax[chip_number].plot(x, y, lw=1, alpha=0.5, marker="o", markersize=2, label=f"ch{ich}", color=color32(ich,"brg"))
+                                    ich += 1
                             
-                            for sample_values in data['sample_value']:
-                                baseline = np.array(mode(sample_values))
-                                x = np.array(sample_indices)
-                                y = np.array(sample_values) - baseline
-                                ax[chip_number].plot(x, y, lw=1, alpha=0.5, marker="o", markersize=2, label=f"ch{ich}", color=color32(ich,"brg"))
-                                ich += 1
-                        
-                        for i in range(4):
-                            ax[i].legend(loc='upper right', ncol=3, fontsize=6)
+                            for i in range(4):
+                                ax[i].legend(loc='upper right', ncol=3, fontsize=6)
 
-                        plt.show(block=False)   
-                        plt.pause(0.01)   
+                            plt.show(block=False)   
+                            plt.pause(0.01)   
 
-                        for i in range(4):
-                            ax[i].clear()
-                            ax[i].set(xlim=(0, 64), ylim=(-300, 725))
-                            ax[i].set_title(f"pulse @ chip{i}")     
-                            ax[i].set_xlabel("Sample index")
-                            ax[i].set_ylabel("Sample value - Base line(mode value)")     
+                            for i in range(4):
+                                ax[i].clear()
+                                ax[i].set(xlim=(0, 64), ylim=(-300, 725))
+                                ax[i].set_title(f"pulse @ chip{i}")     
+                                ax[i].set_xlabel("Sample index")
+                                ax[i].set_ylabel("Sample value - Base line(mode value)")     
 
                         event_block.clear()
                         event_block.append(sample_build_data)
@@ -521,7 +578,6 @@ def scan_stream(path: str, header, footer, timestamp1, timestamp2, timestamp3, c
                 sample_block.clear()
                 sample_block.append(current_data)
      
-    
     def fmt_pairs_color(pairs):
         bs = bytes(b for _, b in pairs)
         out = []
@@ -537,7 +593,7 @@ def scan_stream(path: str, header, footer, timestamp1, timestamp2, timestamp3, c
         return " ".join(out)
 
 
-    def emit_block(start_off, pairs, end_before_abs, tag_reason, dump_flag):
+    def emit_block(start_off, pairs, end_before_abs, tag_reason, dump_flag, event_data_check_flag):
 
         timestamp = None
         trimmed = [p for p in pairs if p[0] < end_before_abs]
@@ -587,10 +643,10 @@ def scan_stream(path: str, header, footer, timestamp1, timestamp2, timestamp3, c
         }
         
         if gap_size+2 == 60 and flag_debuger == 0:
-            sample_builder(sample_block, row)
+            sample_builder(sample_block, row, event_data_check_flag)
 
-        if output is not None:
-            logger.append(row)
+        if output1 is not None:
+            logger1.append(row)
 
         if dump_flag:
             if flag_debuger >= 0:
@@ -646,8 +702,8 @@ def scan_stream(path: str, header, footer, timestamp1, timestamp2, timestamp3, c
                                     after_footer2 = bs[k+2:k+4]
                                     if after_footer2 == active['first2']:
                                         active['footer_abs'] = active['start'] + 2 + k + 4
-                                        emit_block(active['start'], active['pairs'], active['footer_abs'],
-                                                   "ok:footer-in-60B",dump_flag=binary_checker_flag)
+                                        emit_block(active['start'], active['pairs'], active['footer_abs'],"ok:footer-in-60B",
+                                                   dump_flag=binary_checker_flag, event_data_check_flag=event_check_flag)
                                         active = None
                                         break
                                 k += 2
@@ -657,7 +713,7 @@ def scan_stream(path: str, header, footer, timestamp1, timestamp2, timestamp3, c
                                 emit_block(active['start'], active['pairs'],
                                            end_before_abs=active['queued_head'],
                                            tag_reason="fallback:queued-head-on-expire",
-                                           dump_flag=binary_checker_flag)
+                                           dump_flag=binary_checker_flag, event_data_check_flag=event_check_flag)
                                 rebase_active_to(active['queued_head'])
 
                 # prev_raw 初期化
@@ -713,7 +769,8 @@ def scan_stream(path: str, header, footer, timestamp1, timestamp2, timestamp3, c
                                                 emit_block(active['start'], active['pairs'],
                                                            end_before_abs=start_byte,
                                                            tag_reason="fallback:next-afaf",
-                                                           dump_flag=binary_checker_flag)
+                                                           dump_flag=binary_checker_flag,
+                                                           event_data_check_flag=event_check_flag)
                                                 active = {
                                                     'start': start_byte,
                                                     'align': s,
@@ -738,27 +795,26 @@ def scan_stream(path: str, header, footer, timestamp1, timestamp2, timestamp3, c
     return
 
 def common_options(func):
-    @click.option('--name', '-n', default='World', show_default=True, help='Your name')
-    @click.option('--date', '-d', type=click.DateTime(formats=["%Y-%m-%d"]), default=lambda: datetime.datetime.now(), show_default=lambda: datetime.datetime.now().strftime("%Y-%m-%d"), help="Date in YYYY-MM-DD format")
-    @click.option('--verbose', '-v', is_flag=True, help='verbose flag')
+    # @click.option('--name', '-n', default='World', show_default=True, help='Your name')
+    # @click.option('--date', '-d', type=click.DateTime(formats=["%Y-%m-%d"]), default=lambda: datetime.datetime.now(), show_default=lambda: datetime.datetime.now().strftime("%Y-%m-%d"), help="Date in YYYY-MM-DD format")
+    # @click.option('--verbose', '-v', is_flag=True, help='verbose flag')
     # @click.option("--cols", '-c', type=int, default=6)
     # @click.option("--endian", '-e', type=click.Choice(["little", "big"]), default="big")
     # @click.option("--limit", '-l',type=int, default=None,help="ダンプする最大バイト数（未指定なら全体をダンプ）")
     @click.option("--limit", "-l", type=int, default=None, help="最大走査バイト数。指定しない場合は最後まで処理。")
-    @click.option("--maxevt", "-e", type=int, default=-1, help="Plotする最大の件数")
+    @click.option("--maxevt", "-m", type=int, default=-1, help="Plotする最大の件数")
     @click.option('--plot', '-p', is_flag=True, help='plot flag')
     @click.option('--binary', '-b', is_flag=True, help='plot flag')
+    @click.option('--event', '-e', is_flag=True, help='plot event by event flag')
+    @click.option('--decode', '-d', is_flag=True, help='decode flag')
+    
     def wrapper(*args, **kwargs):
         return func(*args, **kwargs)
     return wrapper
 
 @click.command(context_settings=dict(help_option_names=['-h', '--help']))
 @common_options
-def main(name, date, verbose, limit, plot, maxevt, binary):
-    if verbose:
-        click.echo(f"[VERBOSE MODE] Hello {name}, date: {date.strftime('%Y-%m-%d')}")
-    else:
-        click.echo(f"Hello {name}! (Date: {date.strftime('%Y-%m-%d')})")
+def main(limit, plot, maxevt, binary, event, decode):
 
     toml_file_path = this_file_path  / "../../../parameters.toml"
 
@@ -775,15 +831,22 @@ def main(name, date, verbose, limit, plot, maxevt, binary):
     T3_MARKER = format["t3_marker"]# = 0xaffa  
 
     DATA = fileinfo["base_input_path"] + "/" + fileinfo["input_file_dir"] + "/" + fileinfo["input_file_name"] + ".bin"
-    OUTPUT = fileinfo["base_output_path"]  + "/" + fileinfo["input_file_name"] + "_raw.parquet"
+    BASEOUTPUT = fileinfo["base_output_path"]  + "/" + fileinfo["input_file_name"] 
+    OUTPUT1 = BASEOUTPUT + "_raw.parquet"
+    OUTPUT2 = BASEOUTPUT + "_event.parquet"
 
     chunk = 1 << 10 
 
-    scan_stream(DATA, HEADER_MARKER, FOOTER_MARKER, T1_MARKER , T2_MARKER, T3_MARKER, chunk, limit,output=OUTPUT, binary_checker_flag=binary)
+    if decode:
+        scan_stream(DATA, HEADER_MARKER, 
+                    FOOTER_MARKER, T1_MARKER , T2_MARKER, T3_MARKER, 
+                    chunk, limit, output1=OUTPUT1, output2=OUTPUT2,
+                    binary_checker_flag=binary, event_check_flag=event
+        )
 
     if 0:
         spark = (SparkSession.builder.appName("ParquetFilter").getOrCreate())
-        df = spark.read.parquet(OUTPUT)
+        df = spark.read.parquet(OUTPUT1)
         df = (df
             .withColumn("chip_int", F.col("chip").cast("int"))                # or "long"
             .withColumn("sample_index_int", F.col("sample_index").cast("long"))
@@ -793,46 +856,38 @@ def main(name, date, verbose, limit, plot, maxevt, binary):
 
         df.show(10)
 
-
-    if plot:
+    if plot:  
         spark = (SparkSession.builder.appName("ParquetFilter").getOrCreate())
-        df = spark.read.parquet(OUTPUT)
-        df.printSchema()
-        print("Columns:", df.columns)
-
-        df.show(10)
-
+        df = spark.read.parquet(OUTPUT1)
         N = limit  # None なら全件、数値なら先頭N件だけ
-        cols = ['data_block', 'error_level', 'timestamp', 'chip', 'sample_index',  'samples_value']
+        cols = ['data_block', 'error_level', 'timestamp', 'chip', 'sample_index', 'samples_value']
 
         data_block   = []
         error_level  = []
         timestamp    = []
         chip         = []
         sample_index = []
-        samples_value = []
+        max_samples  = []
 
         it = df.select(*cols).toLocalIterator()
         if N is not None:
-            it = islice(it, N)  # 先頭N件だけ取り出す
+            it = islice(it, N) 
 
         for row in it:
-            # row は (data_block, error_level, timestamp, chip_int)
             db, err, ts, ch, ind, sval = row
             data_block.append(db)
             error_level.append(err)
             timestamp.append(ts)
             chip.append(ch)
             sample_index.append(ind)
-
-            if sval is not None:
-                for val in sval:
-                    samples_value.append(val)
+            
+            if ( sval is not None ) and ( len(sval) > 0 ) :
+                max_samples.append(max(sval))
 
         fig = make_subplots(rows=2, cols=2, vertical_spacing=0.15, horizontal_spacing=0.1, subplot_titles=("data_block", "error_level", "sample values", "chip"))
         pau.add_sub_plot(fig,1,1,'1d',[data_block],['Data size','Counts'], xrange=[0,100,1],logs=[False, True])
         pau.add_sub_plot(fig,1,2,'1d',[error_level],['Error Status','Counts'], xrange=[0,4,1],logs=[False, True])
-        pau.add_sub_plot(fig,2,1,'1d',[samples_value],['10 bit sample values','Counts'], xrange=[0,1024,1])
+        pau.add_sub_plot(fig,2,1,'1d',[max_samples],['Max sample','Counts'], xrange=[0,1024,1],logs=[False, True])
         pau.add_sub_plot(fig,2,2,'1d',[chip],['Chip number','Counts'], xrange=[0,4,1])
         fig.update_layout(height=950, width=1400, title_text="test", showlegend=False)
         fig.show()
@@ -844,7 +899,6 @@ def main(name, date, verbose, limit, plot, maxevt, binary):
         pau.add_sub_plot(fig,2,2,'scatter',[error_level],['Number of data block','Error flag'])
         fig.update_layout(height=950, width=1400, title_text="test", showlegend=False)
         fig.show()
-
 
 if __name__ == '__main__':
     main()
