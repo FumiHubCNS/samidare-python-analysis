@@ -233,6 +233,10 @@ def find_pulse(grouped_samples, grouped_timestamp, grouped_chip, grouped_channel
             filtered_grouped_counts, filtered_grouped_max_sample, filtered_grouped_charge, filtered_grouped_total_charge )
 
 def add_sub_plot(fig,irow, icol, plot_type="1d",data=[],labels=[],bins=[200,200],logs=[False,False,True],xrange=[],yrange=[],debug=False):
+
+    xtype = '-' if logs[0] == False else 'log'
+    ytype = '-' if logs[1] == False else 'log'
+ 
     if plot_type == '1d':
         if len(xrange) < 2:
             fig.add_trace(
@@ -251,8 +255,8 @@ def add_sub_plot(fig,irow, icol, plot_type="1d",data=[],labels=[],bins=[200,200]
                 ),
                 row=irow, col=icol
             )
-        fig.update_xaxes(title_text=labels[0], row=irow, col=icol)
-        fig.update_yaxes(title_text=labels[1], row=irow, col=icol)
+        fig.update_xaxes(type=xtype, title_text=labels[0], row=irow, col=icol)
+        fig.update_yaxes(type=ytype, title_text=labels[1], row=irow, col=icol)
 
     elif plot_type == '2d':
         x = data[0]
@@ -288,8 +292,8 @@ def add_sub_plot(fig,irow, icol, plot_type="1d",data=[],labels=[],bins=[200,200]
         
         fig.add_trace(heatmap, row=irow, col=icol)
 
-        fig.update_xaxes(title_text=labels[0], row=irow, col=icol)
-        fig.update_yaxes(title_text=labels[1], row=irow, col=icol)
+        fig.update_xaxes(type=xtype, title_text=labels[0], row=irow, col=icol)
+        fig.update_yaxes(type=ytype, title_text=labels[1], row=irow, col=icol)
 
         rows_range, cols_range = fig._get_subplot_rows_columns()
         nrows = len(rows_range)
@@ -327,8 +331,8 @@ def add_sub_plot(fig,irow, icol, plot_type="1d",data=[],labels=[],bins=[200,200]
            go.Scatter(y=data[0], mode='lines+markers', name='timestamp', marker=dict(size=4),line=dict(width=1)),
             row=irow, col=icol
         )
-        fig.update_xaxes(title_text=labels[0], row=irow, col=icol)
-        fig.update_yaxes(title_text=labels[1], row=irow, col=icol)
+        fig.update_xaxes(type=xtype, title_text=labels[0], row=irow, col=icol)
+        fig.update_yaxes(type=ytype, title_text=labels[1], row=irow, col=icol)
 
 def build_event_and_find_pulse(input, output, dt, debug=False):
 
