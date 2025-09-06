@@ -193,10 +193,10 @@ Rows are grouped as long as they keep the **same `chip`** and **strictly increas
   "timestamp": [621, 653, 685, ...],
   "sample_index": [0, 1, 2, ... 63],
   "samples_value": [
-    [501, 498, 502, ...],   // channel 0 pulse
-    [620, 615, 618, ...],   // channel 1 pulse
+    [501, 498, 502, ...],   // channel  0 pulse
+    [620, 615, 618, ...],   // channel  1 pulse
     ...
-[620, 615, 618, ...], // channel 31 pulse
+    [620, 615, 618, ...],   // channel 31 pulse
   ]
 }
 ```

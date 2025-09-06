@@ -885,7 +885,7 @@ def main(limit, plot, maxevt, binary, event, decode):
 
         fig = make_subplots(rows=2, cols=2, vertical_spacing=0.15, horizontal_spacing=0.1, subplot_titles=("data_block", "error_level", "sample values", "chip"))
         pau.add_sub_plot(fig,1,1,'1d',[data_block],['Data size','Counts'], xrange=[0,100,1],logs=[False, True])
-        pau.add_sub_plot(fig,1,2,'1d',[error_level],['Error Status','Counts'], xrange=[0,4,1],logs=[False, True])
+        pau.add_sub_plot(fig,1,2,'1d',[error_level],['Error Status','Counts'], xrange=[0,31,1],logs=[False, True])
         pau.add_sub_plot(fig,2,1,'1d',[max_samples],['Max sample','Counts'], xrange=[0,1024,1],logs=[False, True])
         pau.add_sub_plot(fig,2,2,'1d',[chip],['Chip number','Counts'], xrange=[0,4,1])
         fig.update_layout(height=950, width=1400, title_text=f"File name:{fileinfo["input_file_name"]}.bin", showlegend=False)
