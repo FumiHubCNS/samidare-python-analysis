@@ -35,6 +35,23 @@ sys.path.append(str(this_file_path.parent.parent.parent / "src"))
 Pair = Tuple[int, int]  # (pos, byte)
 Color = Tuple[float, float, float, float]  # RGBA (0..1)
 
+def common_options(func):
+    # @click.option('--name', '-n', default='World', show_default=True, help='Your name')
+    # @click.option('--date', '-d', type=click.DateTime(formats=["%Y-%m-%d"]), default=lambda: datetime.datetime.now(), show_default=lambda: datetime.datetime.now().strftime("%Y-%m-%d"), help="Date in YYYY-MM-DD format")
+    # @click.option('--verbose', '-v', is_flag=True, help='verbose flag')
+    # @click.option("--cols", '-c', type=int, default=6)
+    # @click.option("--endian", '-e', type=click.Choice(["little", "big"]), default="big")
+    # @click.option("--limit", '-l',type=int, default=None,help="ダンプする最大バイト数（未指定なら全体をダンプ）")
+    @click.option("--limit", "-l", type=int, default=None, help="最大走査バイト数。指定しない場合は最後まで処理。")
+    @click.option("--maxevt", "-m", type=int, default=None, help="Plotする最大の件数")
+    @click.option('--plot', '-p', is_flag=True, help='plot flag')
+    @click.option('--binary', '-b', is_flag=True, help='plot flag')
+    @click.option('--event', '-e', is_flag=True, help='plot event by event flag')
+    @click.option('--decode', '-d', is_flag=True, help='decode flag')
+    
+    def wrapper(*args, **kwargs):
+        return func(*args, **kwargs)
+    return wrapper
 
 class PulseParquetAppender:                    
     # sample_build_data = {
@@ -610,7 +627,7 @@ def scan_stream(path: str, header, footer, timestamp1, timestamp2, timestamp3,
         footer_flag = ( len(marker_hits['fafa'])>0 )
 
         flag_binary, length = pack_many_inverted(datasize_flag, timestamp1_flag, timestamp2_flag, timestamp3_flag, footer_flag)  # → 2
-        flag_debuger = 4 - timestamp1_flag - timestamp2_flag - timestamp3_flag - footer_flag
+        flag_debuger = flag_binary
 
         vals_hex = extract_values_after_markers(pairs, marker_hits)
         vals_int = {k: (int(v,16) if v is not None else None) for k, v in vals_hex.items()}
@@ -793,24 +810,6 @@ def scan_stream(path: str, header, footer, timestamp1, timestamp2, timestamp3,
 
     # EOF：未確定ブロックは出さない（孤立 afaf は無視）
     return
-
-def common_options(func):
-    # @click.option('--name', '-n', default='World', show_default=True, help='Your name')
-    # @click.option('--date', '-d', type=click.DateTime(formats=["%Y-%m-%d"]), default=lambda: datetime.datetime.now(), show_default=lambda: datetime.datetime.now().strftime("%Y-%m-%d"), help="Date in YYYY-MM-DD format")
-    # @click.option('--verbose', '-v', is_flag=True, help='verbose flag')
-    # @click.option("--cols", '-c', type=int, default=6)
-    # @click.option("--endian", '-e', type=click.Choice(["little", "big"]), default="big")
-    # @click.option("--limit", '-l',type=int, default=None,help="ダンプする最大バイト数（未指定なら全体をダンプ）")
-    @click.option("--limit", "-l", type=int, default=None, help="最大走査バイト数。指定しない場合は最後まで処理。")
-    @click.option("--maxevt", "-m", type=int, default=-1, help="Plotする最大の件数")
-    @click.option('--plot', '-p', is_flag=True, help='plot flag')
-    @click.option('--binary', '-b', is_flag=True, help='plot flag')
-    @click.option('--event', '-e', is_flag=True, help='plot event by event flag')
-    @click.option('--decode', '-d', is_flag=True, help='decode flag')
-    
-    def wrapper(*args, **kwargs):
-        return func(*args, **kwargs)
-    return wrapper
 
 @click.command(context_settings=dict(help_option_names=['-h', '--help']))
 @common_options
