@@ -569,7 +569,7 @@ def scan_stream(path: str, header, footer, timestamp1, timestamp2, timestamp3,
 
                                 ich = 0
                                 
-                                for sample_values in data['sample_values']:
+                                for sample_values in data['samples_value']:
                                     baseline = np.array(mode(sample_values))
                                     x = np.array(sample_indices)
                                     y = np.array(sample_values) - baseline
