@@ -46,7 +46,7 @@ uv run python src/samidare_util/decoder/binary_dumper_version3.py -d -e
 uv run python src/samidare_util/decoder/binary_dumper_version3.py -p
 
 # Limit scanned bytes
-uv run python src/samidare_util/decoder/binary_dumper_version3.py --d -l 10000000
+uv run python src/samidare_util/decoder/binary_dumper_version3.py -d -l 10000000
 ```
 
 
