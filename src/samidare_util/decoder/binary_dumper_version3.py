@@ -48,7 +48,7 @@ class PulseParquetAppender:
             ("chip",          pa.int64()),              
             ("timestamp", pa.list_(pa.int64())),
             ("sample_index", pa.list_(pa.int64())),            
-            ("samples_value", pa.list_(pa.int64())) 
+            ("samples_value", pa.list_(pa.list_(pa.int64()))) 
         ])
         self.writer = pq.ParquetWriter(path, self.schema, compression="zstd")
         self.batch_rows = batch_rows
@@ -526,7 +526,7 @@ def scan_stream(path: str, header, footer, timestamp1, timestamp2, timestamp3,
                     "chip" : transposed_sample_block[3][0],
                     "timestamp": transposed_sample_block[2],
                     "sample_index":  transposed_sample_block[4],
-                    "sample_value" : fadc_samples
+                    "samples_value" : fadc_samples
                 }
 
                 if output2 is not None:
@@ -859,7 +859,7 @@ def main(limit, plot, maxevt, binary, event, decode):
     if plot:  
         spark = (SparkSession.builder.appName("ParquetFilter").getOrCreate())
         df = spark.read.parquet(OUTPUT1)
-        N = limit  # None なら全件、数値なら先頭N件だけ
+        N = maxevt  # None なら全件、数値なら先頭N件だけ
         cols = ['data_block', 'error_level', 'timestamp', 'chip', 'sample_index', 'samples_value']
 
         data_block   = []
@@ -889,7 +889,7 @@ def main(limit, plot, maxevt, binary, event, decode):
         pau.add_sub_plot(fig,1,2,'1d',[error_level],['Error Status','Counts'], xrange=[0,4,1],logs=[False, True])
         pau.add_sub_plot(fig,2,1,'1d',[max_samples],['Max sample','Counts'], xrange=[0,1024,1],logs=[False, True])
         pau.add_sub_plot(fig,2,2,'1d',[chip],['Chip number','Counts'], xrange=[0,4,1])
-        fig.update_layout(height=950, width=1400, title_text="test", showlegend=False)
+        fig.update_layout(height=950, width=1400, title_text=f"File name:{fileinfo["input_file_name"]}.bin", showlegend=False)
         fig.show()
 
         fig = make_subplots(rows=2, cols=2, vertical_spacing=0.15, horizontal_spacing=0.1, subplot_titles=("timestamp", "sample_index", "chip", "error_level"))
@@ -897,7 +897,7 @@ def main(limit, plot, maxevt, binary, event, decode):
         pau.add_sub_plot(fig,1,2,'scatter',[sample_index],['Number of data block','Sample index'])
         pau.add_sub_plot(fig,2,1,'scatter',[chip],['Number of data block','Chip number'])
         pau.add_sub_plot(fig,2,2,'scatter',[error_level],['Number of data block','Error flag'])
-        fig.update_layout(height=950, width=1400, title_text="test", showlegend=False)
+        fig.update_layout(height=950, width=1400, title_text=f"File name:{fileinfo["input_file_name"]}.bin", showlegend=False)
         fig.show()
 
 if __name__ == '__main__':
