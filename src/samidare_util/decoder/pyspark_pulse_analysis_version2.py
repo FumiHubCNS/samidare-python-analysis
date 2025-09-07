@@ -334,6 +334,16 @@ def add_sub_plot(fig,irow, icol, plot_type="1d",data=[],labels=[],bins=[200,200]
         fig.update_xaxes(type=xtype, title_text=labels[0], row=irow, col=icol)
         fig.update_yaxes(type=ytype, title_text=labels[1], row=irow, col=icol)
 
+    elif plot_type == 'sparck-hist':
+        fig.add_trace(
+            go.Bar(x=data[0], y=data[1]),
+            row=irow, col=icol
+        )
+
+        fig.update_xaxes(type=xtype, title_text=labels[0], row=irow, col=icol)
+        fig.update_yaxes(type=ytype, title_text=labels[1], row=irow, col=icol)
+
+
 def build_event_and_find_pulse(input, output, dt, debug=False):
 
     OUTPUT_PARQUET_PATH = output
