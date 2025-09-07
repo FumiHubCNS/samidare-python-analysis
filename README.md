@@ -109,12 +109,71 @@ base_output_path = "/path/to/output"
 
 ## Quick command cheatsheet
 
+Base command:
+
 ```bash
 # Run a normal Python script
 uv run python path/to/script.py [options]
 
 # Run a PySpark job
 uv run spark-submit path/to/job.py [spark options] [-- job options]
+```
+
+### Command list for event building 
+
+```bash
+# Decode & dump raw → parquet
+#   Creates the parquet outputs from the binary input.
+uv run spark-submit src/samidare_util/decoder/binary_dumper_version3.py --docode --save  
+
+# Find pulses
+#   Find pulses, derives features (e.g., max sample, charge), and writes a pulses parquet.
+uv run spark-submit src/samidare_util/decoder/pyspark_pulse_finder.py --save
+# Build events
+#   Scan the timestamp of first sample of found pulse and assigns event_id.
+uv run spark-submit src/samidare_util/decoder/pyspark_event_builder_version2.py　--save
+
+# Analyze / visualize
+#   Generates plots/figures (hit maps, timelines, etc.). Saves images (and GIFs if enabled).
+uv run spark-submit src/samidare_util/analysis/pyspark_hit_pattern.py 
+```
+
+#### Option list
+
+```bash
+Usage: binary_dumper_version3.py [OPTIONS]
+Options:
+  -l, --limit INTEGER   maximum data size to be analyzed
+  -m, --maxevt INTEGER  maximum row number for plot
+  -p, --plot            plot flag
+  -b, --binary          binary dump flag
+  -e, --event           plot event by event flag
+  -d, --decode          decode flag
+  --file TEXT           file name without .bin
+  --dir TEXT            base directory name
+  --save                output file generation flag
+  --figsave             fig save flag
+  -h, --help            Show this message and exit.
+
+Usage: pyspark_pulse_finder.py [OPTIONS]
+Options:
+  -r, --rise INTEGER     rising thresold
+  -f, --fall INTEGER     falling thresold
+  -b, --pren INTEGER     number of pre sample
+  -a, --postn INTEGER    number of post sample
+  -l, --minlen INTEGER   minimum pulse length
+  -m, --maxevt INTEGER   maximum event number for debug
+  -cts, --checkts        check timestamp data flag
+  -cpf, --checkpf        check pulse finder result flag
+  -dt, --duration FLOAT  valid timing duration for plot pulse
+  --save                 output file generation flag
+  -c, --refch INTEGER    reference channel for timastamp plot
+  -h, --help             Show this message and exit.
+
+Usage: pyspark_event_builder_version2.py [OPTIONS]
+Options:
+  --save      output file generation flag
+  -h, --help  Show this message and exit.
 ```
 
 # Binary → Parquet Pipeline (logger1 / logger2)
