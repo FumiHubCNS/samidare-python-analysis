@@ -5,36 +5,38 @@
 @date 2025-09-07T09:04:34+09:00
 @brief template text
 """
-
 import click
 import pathlib
 import datetime
-import sys
-import json
 import toml
+import sys
 import pandas as pd
 import numpy as np
-import re
-import os
-import math
-import matplotlib.pyplot as plt
-from typing import Iterator, List
-from pyspark.sql import SparkSession, Row, functions as F, types as T
-from pyspark.sql.functions import pandas_udf
-from pyspark.sql import functions as F, Window
-import pandas as pd
-import plotly.graph_objects as go
-import matplotlib.pyplot as plt
-import numpy as np
-import matplotlib.cm as cm
-import matplotlib.colors as mcolors
-from itertools import islice
-import samidare_util.decoder.binary_dumper_version3 as bd
+from pyspark.sql import SparkSession
+import catmlib.util.catmviewer as catview
+import plotly.express as px
+import plotly.graph_objs as go
+from plotly.subplots import make_subplots
 
 this_file_path = pathlib.Path(__file__).parent
 sys.path.append(str(this_file_path.parent.parent.parent / "src"))
 
+import samidare_util.detector.padinfo as padinfo
+import samidare_util.decoder.pyspark_pulse_analysis_version2 as pau
 
+def get_id_from_mapdf(mapdf, sampaNo=2, sampaID=4, label='gid'):
+    matched = mapdf.loc[(mapdf['sampaNo'] == sampaNo) & (mapdf['sampaID'] == sampaID), label]
+    gid = matched.iloc[0] if not matched.empty else None
+    return gid
+
+def get_any_from_mapdf_using_ref(mapdf,refLabel='samidareID', refID=4, label='gid'):
+    matched = mapdf.loc[(mapdf[refLabel] == refID), label]
+    gid = matched.iloc[0] if not matched.empty else None
+    return gid
+
+def get_any_from_mapdf(mapdf, refLabel='sampaNo', refIDID=4):
+    matched = mapdf[(mapdf[refLabel] == refIDID)]
+    return matched
 
 def common_options(func):
     @click.option('--name', '-n', default='World', show_default=True, help='Your name')
@@ -52,32 +54,63 @@ def main(name, date, verbose):
     else:
         click.echo(f"Hello {name}! (Date: {date.strftime('%Y-%m-%d')})")
 
-
     toml_file_path = this_file_path  / "../../../parameters.toml"
 
     with open(toml_file_path, "r") as f:
         config = toml.load(f)
 
-    fileinfo = config["fileinfo"]
-    base_path = fileinfo["base_output_path"]  + "/" + fileinfo["input_file_name"] 
-    input = base_path + "_pulse.parquet"
-    input_finename = os.path.basename(input)
+    analysinfo = config["analysis"]
+    tpc_map = analysinfo["tpc_mapfile"]
 
-    spark = (
-        SparkSession.builder
-        .config("spark.driver.memory", "8g")
-        .config("spark.sql.execution.arrow.maxRecordsPerBatch", "128") 
-        .config("spark.sql.parquet.enableVectorizedReader", "false")
-        .config("spark.sql.files.maxPartitionBytes", 32 * 1024 * 1024)
-        .getOrCreate()
-    )
+    offset = -3.031088913245535
+    pad1 = padinfo.get_tpc_info(offset-10)
+    pad2 = padinfo.get_tpc_info(offset+10,False)
+    tpcs = padinfo.marge_padinfos(pad1,pad2)
 
-    df = spark.read.parquet(input)
+    mapdf = pd.read_csv(tpc_map)
+    mapdf['padID'] = pd.to_numeric(mapdf['padID'], errors='coerce')
+    mapdf['gid'] = pd.to_numeric(mapdf['gid'], errors='coerce')
 
-    df.show(20)
+    mapdf['tpcID'] = mapdf['tpcID'].astype(int)
+    mapdf['padID'] = mapdf['padID'].fillna(-1).astype(int)
+    mapdf['gid'] = mapdf['gid'].fillna(-1).astype(int)
+    mapdf['sampaNo'] = mapdf['sampaNo'].astype(int)
+    mapdf['sampaID'] = mapdf['sampaID'].astype(int)
+    mapdf['samidareID'] = mapdf['samidareID'].astype(int)
 
+    mapdf = mapdf.reset_index(drop=True)
+
+    tpc_chip = []
+    tpc_channel = []
+
+    if 1:
+        for i in range(120):
+            tpc_ref_sampa_chip = get_any_from_mapdf_using_ref(mapdf,refLabel='gid',refID=i,label='sampaNo')
+            tpc_ref_sampa_channel = get_any_from_mapdf_using_ref(mapdf,refLabel='gid',refID=i,label='sampaID')
+            tpc_ref_samidare_id = get_any_from_mapdf_using_ref(mapdf,refLabel='gid',refID=i,label='samidareID')
+            tpc_chip.append(tpc_ref_sampa_chip)
+            tpc_channel.append(tpc_ref_sampa_channel)
+            print(f"tpc id: {i}, samidare id: {tpc_ref_samidare_id}, sampa: ({tpc_ref_sampa_chip}, {tpc_ref_sampa_channel})")
+
+    if 1:
+        cehck_list = tpc_chip
+        bins, colors = catview.get_color_list(cehck_list, cmap_name="rainbow", fmt="hex")
+        color_array  = catview.get_color_array(cehck_list,bins,colors)
+        tpcs.show_pads(check_id=True, check_size=13, plot_type='map',color_map=color_array, check_data=tpcs.ids)
+
+    if 1:
+        for i in range(len(tpcs.ids)):
+            print(f"{tpcs.ids[i]}, {tpcs.centers[i]}")
+
+    if 1:
+        for i in range(4):
+            for j in range(32):
+                samid = get_id_from_mapdf(mapdf,i, j,'samidareID')
+                gid = get_id_from_mapdf(mapdf,i, j,'gid')
+                tpcid = get_id_from_mapdf(mapdf,i, j,'tpcID')
+                padid = get_id_from_mapdf(mapdf,i, j,'padID')
+                print(f"{i}, {j}, {samid}, {gid}, {tpcid}, {padid}")
 
 
 if __name__ == '__main__':
     main()
-

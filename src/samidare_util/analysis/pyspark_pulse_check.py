@@ -34,8 +34,8 @@ import samidare_util.decoder.pyspark_pulse_analysis_version2 as pau
 import plotly.express as px
 import plotly.graph_objs as go
 from plotly.subplots import make_subplots
-
-
+import pandas as pd
+from pyspark.sql import functions as F, types as T, Window
 
 this_file_path = pathlib.Path(__file__).parent
 sys.path.append(str(this_file_path.parent.parent.parent / "src"))
@@ -47,6 +47,69 @@ def common_options(func):
     def wrapper(*args, **kwargs):
         return func(*args, **kwargs)
     return wrapper
+
+def add_event_id_anchor(
+    df,
+    time_col: str = "t0_ms",
+    threshold_ms: float = 50.0,
+    id_col: str = "event_id",
+):
+    """
+    タイムスタンプの昇順で走査し、「最後に閾値を超えた時刻（アンカー）」との差が
+    threshold_ms を超えたらイベント番号を+1し、アンカーをその行に更新。
+    keys なし（全体で単一の流れ）で番号を付与します。
+
+    返り値: df に id_col を追加した DataFrame
+    """
+
+    # 1) 元DFに一意IDを付与（後で join で戻すため）
+    df1 = df.withColumn("__rid", F.monotonically_increasing_id())
+
+    # 2) t0_ms がある行だけを抽出して時刻昇順にソート
+    df_nonnull = (
+        df1
+        .where(F.col(time_col).isNotNull())
+        .select("__rid", F.col(time_col).cast("double").alias(time_col))
+        .orderBy(F.col(time_col).asc(), F.col("__rid").asc())
+        # 全体で連続走査したいので 1 partition にまとめる（データ量が非常に大きい場合は注意）
+        .coalesce(1)
+    )
+
+    # 3) pandas 側でアンカー方式のイベントIDを付与（__rid と event_id だけ返す）
+    schema_ids = T.StructType([
+        T.StructField("__rid", T.LongType(), False),
+        T.StructField(id_col, T.LongType(), False),
+    ])
+
+    def _assign_event_id(pdf_iter):
+        for pdf in pdf_iter:
+            if pdf.empty:
+                yield pd.DataFrame({"__rid": [], id_col: []})
+                continue
+
+            pdf = pdf.sort_values([time_col, "__rid"]).reset_index(drop=True)
+            ev = []
+            gid = 1
+            anchor = pdf.loc[0, time_col]
+            ev.append(gid)
+            for v in pdf[time_col].iloc[1:]:
+                if abs(v - anchor) <= threshold_ms:
+                    ev.append(gid)
+                else:
+                    gid += 1
+                    anchor = v  # アンカー更新
+                    ev.append(gid)
+            out = pd.DataFrame({"__rid": pdf["__rid"], id_col: ev})
+            yield out
+
+    df_ids = df_nonnull.mapInPandas(_assign_event_id, schema=schema_ids)
+
+    # 4) 元DFへ戻す（t0_ms が NULL の行は event_id NULL のまま）
+    df_out = (
+        df1.join(df_ids, on="__rid", how="left")
+           .drop("__rid")
+    )
+    return df_out
 
 @click.command(context_settings=dict(help_option_names=['-h', '--help']))
 @common_options
@@ -77,58 +140,59 @@ def main(name, date, verbose):
     )
 
     df = spark.read.parquet(input)
-    # df.show(200)
 
-
-    # col = "channel"  
-    # freq_df = (
-    #     df.select(F.col(col).cast("long").alias(col))
-    #     .where(F.col(col).isNotNull())
-    #     .groupBy(col).count()
-    #     .orderBy(F.desc("count"))
-    # )
-
-    # pdf = freq_df.toPandas()
-
-    # fig = go.Figure(go.Bar(x=pdf[col], y=pdf["count"]))
-    # fig.update_layout(title=f"Frequency of {col}", xaxis_title=col, yaxis_title="count")
-    # fig.show()
-
+    pulse_sum = F.aggregate(
+        F.col("pulse"),
+        F.lit(0.0),
+        lambda acc, x: acc + F.coalesce(x.cast("double"), F.lit(0.0))
+    ).alias("charge")
 
     df_aug = (df
-        .select("chip", "channel", "pulse")
-        .withColumn("chip_channel", F.col("chip") * F.lit(32) + F.col("channel"))
-        .withColumn("pulse_max", F.array_max("pulse").cast("long"))  # 空配列は NULL になる
+        .select("chip", "channel", "pulse", "t0_ms")
+        .withColumn("samidare_id", F.col("chip") * F.lit(32) + F.col("channel"))
+        .withColumn("maxsample", F.array_max("pulse").cast("long")) 
+        .withColumn("charge", pulse_sum)  
     )
 
-    freq_chip         = (df_aug.groupBy("chip").count().orderBy("chip"))
-    freq_channel      = (df_aug.groupBy("channel").count().orderBy("channel"))
-    freq_chip_channel = (df_aug.groupBy("chip_channel").count().orderBy(F.desc("count")))
-    freq_pulse_max    = (df_aug.where(F.col("pulse_max").isNotNull()).groupBy("pulse_max").count().orderBy(F.desc("count")))
+    if 0:
 
-    df_histo_chip = freq_chip.toPandas()
-    df_histo_chan = freq_channel.toPandas()
-    df_histo_sami = freq_chip_channel.toPandas()
-    df_histo_maxh = freq_pulse_max.toPandas()
+        freq_chip         = (df_aug.groupBy("chip").count().orderBy("chip"))
+        freq_channel      = (df_aug.groupBy("channel").count().orderBy("channel"))
+        freq_samidare_id = (df_aug.groupBy("samidare_id").count().orderBy(F.desc("count")))
+        freq_maxsample    = (df_aug.where(F.col("maxsample").isNotNull()).groupBy("maxsample").count().orderBy(F.desc("count")))
 
-    data1 = [df_histo_chip["chip"], df_histo_chip["count"]] 
-    data2 = [df_histo_chan["channel"], df_histo_chan["count"]] 
-    data3 = [df_histo_sami["chip_channel"], df_histo_sami["count"]] 
-    data4 = [df_histo_maxh["pulse_max"], df_histo_maxh["count"]] 
+        df_histo_chip = freq_chip.toPandas()
+        df_histo_chan = freq_channel.toPandas()
+        df_histo_sami = freq_samidare_id.toPandas()
+        df_histo_maxh = freq_maxsample.toPandas()
 
-    fig = make_subplots(rows=2, cols=2, vertical_spacing=0.15, horizontal_spacing=0.1,
-        subplot_titles=( "sampa chip", "sampa channel", "samidare id", "maximum sample value" ))
+        data1 = [df_histo_chip["chip"], df_histo_chip["count"]] 
+        data2 = [df_histo_chan["channel"], df_histo_chan["count"]] 
+        data3 = [df_histo_sami["samidare_id"], df_histo_sami["count"]] 
+        data4 = [df_histo_maxh["maxsample"], df_histo_maxh["count"]] 
 
-    pau.add_sub_plot(fig,1,1,'sparck-hist',[*data1],['sampa chip ID','Counts'])
-    pau.add_sub_plot(fig,1,2,'sparck-hist',[*data2],['sampa channel','Counts'])
-    pau.add_sub_plot(fig,2,1,'sparck-hist',[*data3],['samidare id','Counts'])
-    pau.add_sub_plot(fig,2,2,'sparck-hist',[*data4],['max sample','Counts'])
+        fig = make_subplots(rows=2, cols=2, vertical_spacing=0.15, horizontal_spacing=0.1,
+            subplot_titles=( "sampa chip", "sampa channel", "samidare id", "maximum sample value" ))
 
-    fig.update_layout( height=800, width=1000, showlegend=False,
-        title_text=f"{input_finename}")
-        
-    fig.show()
+        pau.add_sub_plot(fig,1,1,'sparck-hist',[*data1],['sampa chip ID','Counts'])
+        pau.add_sub_plot(fig,1,2,'sparck-hist',[*data2],['sampa channel','Counts'])
+        pau.add_sub_plot(fig,2,1,'sparck-hist',[*data3],['samidare id','Counts'])
+        pau.add_sub_plot(fig,2,2,'sparck-hist',[*data4],['max sample','Counts'])
 
+        fig.update_layout( height=800, width=1000, showlegend=False,title_text=f"{input_finename}")
+        fig.show()
+
+        df_ts = df_aug.select("t0_ms", "maxsample").where(F.col("t0_ms").isNotNull() & F.col("maxsample").isNotNull())
+        pdf = df_ts.toPandas()
+        data5 = [pdf["t0_ms"].tolist(), pdf["maxsample"].tolist()]
+
+        fig = make_subplots(rows=1, cols=1, vertical_spacing=0.15, horizontal_spacing=0.1, subplot_titles=( "test" ))
+        pau.add_sub_plot(fig,1,1,'plot',[*data5],['timestamp','max sample'],[100,100], [False,False,False])
+        fig.update_layout( height=800, width=1000, showlegend=False,title_text=f"{input_finename}")
+        fig.show()
+
+    df_ev = add_event_id_anchor(df_aug, time_col="t0_ms", threshold_ms=100.0, id_col="event_id")
+    df_ev.show(100)
 
 if __name__ == '__main__':
     main()

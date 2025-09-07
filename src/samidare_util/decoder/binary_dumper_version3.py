@@ -28,6 +28,8 @@ import numpy as np
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
 from typing import Iterable, Union, List, Tuple
+import samidare_util.analysis.savefig_util as saveutil
+from collections import Counter
 
 this_file_path = pathlib.Path(__file__).parent
 sys.path.append(str(this_file_path.parent.parent.parent / "src"))
@@ -36,15 +38,16 @@ Pair = Tuple[int, int]  # (pos, byte)
 Color = Tuple[float, float, float, float]  # RGBA (0..1)
 
 def common_options(func):
-    @click.option("--limit" , "-l", type=int, default=None, help="maximum data size to be analyzed")
-    @click.option("--maxevt", "-m", type=int, default=None, help="maximum row number for plot")
-    @click.option('--plot'  , '-p', is_flag=True, help='plot flag')
-    @click.option('--binary', '-b', is_flag=True, help='binary dump flag')
-    @click.option('--event' , '-e', is_flag=True, help='plot event by event flag')
-    @click.option('--decode', '-d', is_flag=True, help='decode flag')
-    @click.option('--file'  , type=str, default=None, help='file name without .bin')
-    @click.option('--dir'   , type=str, default=None, help='base directory name')
-    @click.option('--save'  , is_flag=True, help='output file generation flag')
+    @click.option("--limit"  , "-l", type=int, default=None, help="maximum data size to be analyzed")
+    @click.option("--maxevt" , "-m", type=int, default=None, help="maximum row number for plot")
+    @click.option('--plot'   , '-p', is_flag=True, help='plot flag')
+    @click.option('--binary' , '-b', is_flag=True, help='binary dump flag')
+    @click.option('--event'  , '-e', is_flag=True, help='plot event by event flag')
+    @click.option('--decode' , '-d', is_flag=True, help='decode flag')
+    @click.option('--file'   , type=str, default=None, help='file name without .bin')
+    @click.option('--dir'    , type=str, default=None, help='base directory name')
+    @click.option('--save'   , is_flag=True, help='output file generation flag')
+    @click.option('--figsave', is_flag=True, help='fig save flag')
 
     def wrapper(*args, **kwargs):
         return func(*args, **kwargs)
@@ -126,6 +129,11 @@ class SAMPADataParquetAppender:
     def close(self):
         self._flush()
         self.writer.close()
+
+
+def value_counts(lst):
+    # {値: 出現回数} の辞書（値の昇順）
+    return dict(sorted(Counter(lst).items()))
 
 def _colors32(cmap: Union[str, mcolors.Colormap]) -> np.ndarray:
     """
@@ -798,7 +806,7 @@ def scan_stream(path: str, header, footer, timestamp1, timestamp2, timestamp3,
 
 @click.command(context_settings=dict(help_option_names=['-h', '--help']))
 @common_options
-def main(limit, plot, maxevt, binary, event, decode, file, dir, save):
+def main(limit, plot, maxevt, binary, event, decode, file, dir, save, figsave):
 
     toml_file_path = this_file_path  / "../../../parameters.toml"
 
@@ -823,7 +831,9 @@ def main(limit, plot, maxevt, binary, event, decode, file, dir, save):
     DATA = fileinfo["base_input_path"] + "/" + fileinfo["input_file_dir"] + "/" + fileinfo["input_file_name"] + ".bin"
     BASEOUTPUT = fileinfo["base_output_path"]  + "/" + fileinfo["input_file_name"] 
     OUTPUT1 = BASEOUTPUT + "_raw.parquet" if save else None
-    OUTPUT2 = BASEOUTPUT + "_event.parquet" if save else None 
+    OUTPUT2 = BASEOUTPUT + "_event.parquet" if save else None
+
+    savebase = str(this_file_path.parent.parent.parent / "figs") 
 
     chunk = 1 << 10 
 
@@ -847,6 +857,8 @@ def main(limit, plot, maxevt, binary, event, decode, file, dir, save):
         print("Columns:", df.columns)
 
         df.show(10)
+
+    OUTPUT1 = BASEOUTPUT + "_raw.parquet"
 
     if plot:  
         spark = (SparkSession.builder.appName("ParquetFilter").getOrCreate())
@@ -876,21 +888,43 @@ def main(limit, plot, maxevt, binary, event, decode, file, dir, save):
             if ( sval is not None ) and ( len(sval) > 0 ) :
                 max_samples.append(max(sval))
 
-        fig = make_subplots(rows=2, cols=2, vertical_spacing=0.15, horizontal_spacing=0.1, subplot_titles=("data_block", "error_level", "sample values", "chip"))
+        fig = make_subplots(rows=2, cols=2, vertical_spacing=0.2, horizontal_spacing=0.2, subplot_titles=("data_block", "error_level", "sample values", "chip"))
         pau.add_sub_plot(fig,1,1,'1d',[data_block],['Data size','Counts'], xrange=[0,100,1],logs=[False, True])
         pau.add_sub_plot(fig,1,2,'1d',[error_level],['Error Status','Counts'], xrange=[0,31,1],logs=[False, True])
         pau.add_sub_plot(fig,2,1,'1d',[max_samples],['Max sample','Counts'], xrange=[0,1024,1],logs=[False, True])
         pau.add_sub_plot(fig,2,2,'1d',[chip],['Chip number','Counts'], xrange=[0,4,1])
         fig.update_layout(height=950, width=1400, title_text=f"File name:{fileinfo["input_file_name"]}.bin", showlegend=False)
-        fig.show()
+        if figsave:
+            saveutil.save_plotly(fig, base_dir=savebase)
+        else:
+            fig.show()
+        
+        block_counts_dict = value_counts(data_block)
+        error_counts_dict = value_counts(error_level)
+        
+        good  = block_counts_dict[60]
+        total = sum(block_counts_dict.values())
 
-        # fig = make_subplots(rows=2, cols=2, vertical_spacing=0.15, horizontal_spacing=0.1, subplot_titles=("timestamp", "sample_index", "chip", "error_level"))
-        # pau.add_sub_plot(fig,1,1,'scatter',[timestamp],['Number of data block','Timestamp'])
-        # pau.add_sub_plot(fig,1,2,'scatter',[sample_index],['Number of data block','Sample index'])
-        # pau.add_sub_plot(fig,2,1,'scatter',[chip],['Number of data block','Chip number'])
-        # pau.add_sub_plot(fig,2,2,'scatter',[error_level],['Number of data block','Error flag'])
-        # fig.update_layout(height=950, width=1400, title_text=f"File name:{fileinfo["input_file_name"]}.bin", showlegend=False)
-        # fig.show()
+        print(f"{fileinfo["input_file_name"]}.bin")
+        print(f"    good block rate: {good/total*100.}")
+
+        evall = error_counts_dict.keys()
+        total = sum(error_counts_dict.values())
+
+        for idx in evall:
+            flaginfo = unpack_inverted(idx, 5)
+            print(f"    error flag: {idx}, unpack flags: {flaginfo}, rate {error_counts_dict[idx]/total*100.}")
+
+        fig = make_subplots(rows=2, cols=2, vertical_spacing=0.2, horizontal_spacing=0.2, subplot_titles=("timestamp", "sample_index", "chip", "error_level"))
+        pau.add_sub_plot(fig,1,1,'scatter',[timestamp],['Number of data block','Timestamp'])
+        pau.add_sub_plot(fig,1,2,'scatter',[sample_index],['Number of data block','Sample index'])
+        pau.add_sub_plot(fig,2,1,'scatter',[chip],['Number of data block','Chip number'])
+        pau.add_sub_plot(fig,2,2,'scatter',[error_level],['Number of data block','Error flag'])
+        fig.update_layout(height=950, width=1400, title_text=f"File name:{fileinfo["input_file_name"]}.bin", showlegend=False)
+        if figsave:
+            saveutil.save_plotly(fig, base_dir=savebase)
+        else:
+            fig.show()
 
 if __name__ == '__main__':
     main()
