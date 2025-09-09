@@ -39,20 +39,14 @@ def get_any_from_mapdf(mapdf, refLabel='sampaNo', refIDID=4):
     return matched
 
 def common_options(func):
-    @click.option('--name', '-n', default='World', show_default=True, help='Your name')
-    @click.option('--date', '-d', type=click.DateTime(formats=["%Y-%m-%d"]), default=lambda: datetime.datetime.now(), show_default=lambda: datetime.datetime.now().strftime("%Y-%m-%d"), help="Date in YYYY-MM-DD format")
-    @click.option('--verbose', '-v', is_flag=True, help='verbose flag')
+    @click.option('--text', '-t', default='tcpid', show_default=True, help='select the text values')
     def wrapper(*args, **kwargs):
         return func(*args, **kwargs)
     return wrapper
 
 @click.command(context_settings=dict(help_option_names=['-h', '--help']))
 @common_options
-def main(name, date, verbose):
-    if verbose:
-        click.echo(f"[VERBOSE MODE] Hello {name}, date: {date.strftime('%Y-%m-%d')}")
-    else:
-        click.echo(f"Hello {name}! (Date: {date.strftime('%Y-%m-%d')})")
+def main(text):
 
     toml_file_path = this_file_path  / "../../../parameters.toml"
 
@@ -63,8 +57,8 @@ def main(name, date, verbose):
     tpc_map = analysinfo["tpc_mapfile"]
 
     offset = -3.031088913245535
-    pad1 = padinfo.get_tpc_info(offset-10)
-    pad2 = padinfo.get_tpc_info(offset+10,False)
+    pad1 = padinfo.get_tpc_info(offset-5)
+    pad2 = padinfo.get_tpc_info(offset+5,False)
     tpcs = padinfo.marge_padinfos(pad1,pad2)
 
     mapdf = pd.read_csv(tpc_map)
@@ -92,11 +86,14 @@ def main(name, date, verbose):
             tpc_channel.append(tpc_ref_sampa_channel)
             print(f"tpc id: {i}, samidare id: {tpc_ref_samidare_id}, sampa: ({tpc_ref_sampa_chip}, {tpc_ref_sampa_channel})")
 
+
+    textdict = { "tpcid" : tpcs.ids , "chipid" : tpc_chip , "sampach" : tpc_channel}
+
     if 1:
         cehck_list = tpc_chip
         bins, colors = catview.get_color_list(cehck_list, cmap_name="rainbow", fmt="hex")
         color_array  = catview.get_color_array(cehck_list,bins,colors)
-        tpcs.show_pads(check_id=True, check_size=13, plot_type='map',color_map=color_array, check_data=tpcs.ids)
+        tpcs.show_pads(check_id=True, check_size=13, plot_type='map',color_map=color_array, check_data=textdict[text])
 
     if 1:
         for i in range(len(tpcs.ids)):

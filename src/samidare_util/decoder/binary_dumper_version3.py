@@ -915,16 +915,16 @@ def main(limit, plot, maxevt, binary, event, decode, file, dir, save, figsave):
             flaginfo = unpack_inverted(idx, 5)
             print(f"    error flag: {idx}, unpack flags: {flaginfo}, rate {error_counts_dict[idx]/total*100.}")
 
-        fig = make_subplots(rows=2, cols=2, vertical_spacing=0.2, horizontal_spacing=0.2, subplot_titles=("timestamp", "sample_index", "chip", "error_level"))
-        pau.add_sub_plot(fig,1,1,'scatter',[timestamp],['Number of data block','Timestamp'])
-        pau.add_sub_plot(fig,1,2,'scatter',[sample_index],['Number of data block','Sample index'])
-        pau.add_sub_plot(fig,2,1,'scatter',[chip],['Number of data block','Chip number'])
-        pau.add_sub_plot(fig,2,2,'scatter',[error_level],['Number of data block','Error flag'])
-        fig.update_layout(height=950, width=1400, title_text=f"File name:{fileinfo["input_file_name"]}.bin", showlegend=False)
-        if figsave:
-            saveutil.save_plotly(fig, base_dir=savebase)
-        else:
-            fig.show()
+        # fig = make_subplots(rows=2, cols=2, vertical_spacing=0.2, horizontal_spacing=0.2, subplot_titles=("timestamp", "sample_index", "chip", "error_level"))
+        # pau.add_sub_plot(fig,1,1,'scatter',[timestamp],['Number of data block','Timestamp'])
+        # pau.add_sub_plot(fig,1,2,'scatter',[sample_index],['Number of data block','Sample index'])
+        # pau.add_sub_plot(fig,2,1,'scatter',[chip],['Number of data block','Chip number'])
+        # pau.add_sub_plot(fig,2,2,'scatter',[error_level],['Number of data block','Error flag'])
+        # fig.update_layout(height=950, width=1400, title_text=f"File name:{fileinfo["input_file_name"]}.bin", showlegend=False)
+        # if figsave:
+        #     saveutil.save_plotly(fig, base_dir=savebase)
+        # else:
+        #     fig.show()
 
 if __name__ == '__main__':
     main()

@@ -154,7 +154,7 @@ def main(name, date, verbose):
         .withColumn("charge", pulse_sum)  
     )
 
-    if 0:
+    if 1:
 
         freq_chip         = (df_aug.groupBy("chip").count().orderBy("chip"))
         freq_channel      = (df_aug.groupBy("channel").count().orderBy("channel"))

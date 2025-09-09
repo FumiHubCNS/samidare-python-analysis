@@ -13,6 +13,7 @@ import os
 import pandas as pd
 from pyspark.sql import functions as F, types as T
 from pyspark.sql import SparkSession
+from pyspark.sql import functions as F, Window
 
 this_file_path = pathlib.Path(__file__).parent
 sys.path.append(str(this_file_path.parent.parent.parent / "src"))
@@ -23,6 +24,38 @@ def common_options(func):
     def wrapper(*args, **kwargs):
         return func(*args, **kwargs)
     return wrapper
+
+def add_event_id_gap(df, *, time_col: str = "timestamp_ms",
+                     threshold_ms: float = 50.0,
+                     id_col: str = "event_id"):
+    """
+    直前レコードとの時間差が threshold を超えたらイベント番号を+1。
+    null の時間は event_id を付与しない（nullのまま）。
+
+    df: 任意の DataFrame（time_col を含む）
+    time_col: ミリ秒などの昇順で並べる時刻列（数値/小数にキャスト可能であること）
+    threshold_ms: 新イベント判定のしきい値（time_col と同じ単位）
+    id_col: 付与するイベントID列名
+    """
+    # タイブレーク用の安定IDを付与
+    df1 = df.withColumn("__rid", F.monotonically_increasing_id())
+
+    # event_id は time_col が null でない行だけで計算し、あとで join
+    base = (
+        df1
+        .where(F.col(time_col).isNotNull())
+        .select("__rid", F.col(time_col).cast("double").alias(time_col))
+    )
+
+    w = Window.orderBy(F.col(time_col).asc(), F.col("__rid").asc())
+    dt = F.col(time_col) - F.lag(time_col).over(w)
+    new_grp = F.when(dt.isNull() | (dt > F.lit(threshold_ms)), 1).otherwise(0)
+    event_id = F.sum(new_grp).over(w).cast("long")
+
+    ids = base.select(F.col("__rid"), event_id.alias(id_col))
+    out = df1.join(ids, on="__rid", how="left").drop("__rid")
+    return out
+
 
 def add_event_id_anchor(df, time_col: str = "t0_ms", threshold_ms: float = 50.0, id_col: str = "event_id"):
 
@@ -112,8 +145,11 @@ def main(save):
         .withColumn("charge", pulse_sum)  
     )
 
-    df_ev = add_event_id_anchor(df_aug, time_col="timestamp_ms", threshold_ms=100.0, id_col="event_id")
-    # df_ev.show(10)
+    # v = 32.2 mm/ns, l = 100 mm -> 100 / 32.2 3.1ns -> 2 sample
+    # timestamp /  340000. = ms,  1 timestamp=> 0.0000029ms -> 2.9ns 
+    # df_ev = add_event_id_anchor(df_aug, time_col="timestamp_ms", threshold_ms=100.0, id_col="event_id")
+    df_ev = add_event_id_gap(df_aug, time_col="timestamp_ms", threshold_ms=5, id_col="event_id")
+
 
     if save:
         (df_ev

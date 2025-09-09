@@ -14,11 +14,13 @@ import numpy as np
 import os 
 import plotly.graph_objs as go
 
+from pyspark.sql import Row
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F, types as T
 from plotly.subplots import make_subplots
 from math import isfinite
 
+import catmlib as cat
 import catmlib.util.catmviewer as catview
 import samidare_util.decoder.pyspark_pulse_analysis_version2 as pau
 import samidare_util.analysis.savefig_util as saveutil
@@ -104,6 +106,29 @@ def get_pads():
     tpcs = padinfo.marge_padinfos(pad1,pad2)
     return tpcs
 
+
+def calculate_position_charge(
+        pad:cat.basepad.TReadoutPadArray = None, 
+        vids:list = None, 
+        tpcid:list =None,
+        charge:list = None,
+        time:list = None
+        ): 
+    ps = []
+    qs= []
+    
+    for idx in vids:    
+        pos = pad.centers[tpcid[idx]]
+        pos[1] = time[idx]
+        ps.append(pos)
+        qs.append(charge[idx])
+
+    return (ps, qs)
+
+
+def calculate_weighted_average(vals, wts):
+    return sum(v*w for v, w in zip(vals, wts)) / sum(wts)
+
 @click.command(context_settings=dict(help_option_names=['-h', '--help']))
 @common_options
 def main(verbose):
@@ -167,7 +192,6 @@ def main(verbose):
 
     df_plot = (df_gid.filter(df_gid['tpc_id'] >= 0))
 
-
     if 0:
         data1 = (df_plot.groupBy("samidare_id").count().orderBy("samidare_id"))
         data2 = (df_plot.groupBy("tpc_id").count().orderBy("tpc_id"))
@@ -186,119 +210,122 @@ def main(verbose):
         fig.show()
         # saveutil.save_plotly(fig, base_dir=savebase)
 
+    df_events = (
+        df_plot
+        .groupBy("event_id")
+        .agg(
+            F.min("timestamp_ms").alias("event_time_ms"),  # 並び替え用の代表時刻
+            F.collect_list(F.struct(
+                F.col("timestamp_ms"),
+                F.col("tpc_id"),
+                F.col("charge"),
+                F.col("pulse"),
+                F.col("times"),
+                F.col("event_id"),
+            )).alias("hits")
+        )
+        .orderBy("event_id")  # ここで本当にグローバルに並びます
+    )
 
     qsum_arr = []
-    qsum = 0
-    hitpatt_id = []
-    hitpatt_q = []
-
-    ref_evt = 1
-    figcount = 0
-    uqx = 0 
-    dqx = 0
-
-    uqs = []
-    dqs = []
-    uposs = []
-    dposs = []
-
+    tmdiff_arr = []
+    
     uqsum = []
     dqsum = []
     uxg = []
     dxg = []
 
+    figcount = 0
+
     tpcs = get_pads()
 
-    for row in df_plot.toLocalIterator():
-        evtid  = row["event_id"]
-        charge = row["charge"]
-        tpcid = row["tpc_id"]
+    for ev in df_events.toLocalIterator():
 
-        if ref_evt == evtid:
-            hitpatt_id.append(tpcid)
-            hitpatt_q.append(charge)
-            qsum += charge
-        
-        else:
+        rows = sorted(ev['hits'], key=lambda h: (h['timestamp_ms']))
 
-            if 1:
-                q_lst = [0] * len(tpcs.ids)
-                for j in range(len(hitpatt_id)):
-                    q_lst[int(hitpatt_id[j])] = hitpatt_id[j]
-                    
-                cehck_list = q_lst
-                bins, colors = catview.get_color_list(cehck_list, cmap_name="ocean_r", fmt="hex")
-                color_array  = catview.get_color_array(cehck_list,bins,colors)
+        evtid_arr     = [r['event_id']     for r in rows]
+        tpcid_arr     = [r['tpc_id']       for r in rows]
+        charge_arr    = [r['charge']      for r in rows]        
+        timestamp_arr = [r['timestamp_ms'] for r in rows]
+        pulse_arr     = [r['pulse']        for r in rows]   
+        clock_arr     = [r['times']        for r in rows]
 
-                thr = 60
-                count1 = sum(1 for v in hitpatt_id if v <  thr)
-                count2 = sum(1 for v in hitpatt_id if v >= thr)
+        maxsample_clock_arr = []
 
-                up3_vidx = within_range_indices(hitpatt_id, 40, 59)
-                sn1_vidx = within_range_indices(hitpatt_id, 60, 79)
-
-                if len(up3_vidx) > 0 and len(sn1_vidx) > 0:
-                    for uidx in up3_vidx:
-                        pos = tpcs.centers[uidx]
-                        q   = hitpatt_q[uidx]
-
-                        uposs.append(pos[0])
-                        uqs.append(q)
-
-                    for didx in sn1_vidx:
-                        pos = tpcs.centers[didx]
-                        q   = hitpatt_q[didx]
-
-                        dposs.append(pos[0])
-                        dqs.append(q)
-                    
-                    uqsum.append(sum(uqs))
-                    dqsum.append(sum(dqs))
-
-                    for k in range(len(uqs)):
-                        uqx += uqs[0] * uposs[0]
-
-                    for k in range(len(dqs)):
-                        dqx += dqs[0] * dposs[0]
-
-                    uxg.append(uqx/sum(uqs))
-                    dxg.append(dqx/sum(dqs))
-
-                    uposs.clear()
-                    uqs.clear()
-                    dposs.clear()
-                    dqs.clear()
-                    uqx=0
-                    dqx=0
-
-                if count2 > 9 and count1 > 9:
-                    if 0:
-                        tpcs.show_pads(
-                            plot_type='map', 
-                            color_map=color_array, 
-                            xrange=[-20,20],
-                            block_flag=False,
-                            savepath = None #f"{savebase}/20250907/{figcount:5d}.png"
-                        )
-                        figcount += 1
-    
-            hitpatt_id.clear()
-            hitpatt_q.clear()
-            qsum_arr.append(qsum)
+        for i in range(len(pulse_arr)):
+            maxsample_timestamp = clock_arr[i][int(np.argmax(pulse_arr[i]))] / 340000.
             
-            qsum = 0
-            hitpatt_id.append(tpcid)
-            hitpatt_q.append(charge)
-            qsum += charge
-            ref_evt = evtid
+            for j in range(len(pulse_arr[i])):
+                clock_arr[i][j] = timestamp_arr[i] + maxsample_timestamp
 
-    if 0:
-        fig = make_subplots(rows=1, cols=1, vertical_spacing=0.15, horizontal_spacing=0.1,
-        subplot_titles=( "Total Charge", ))
+
+            maxsample_clock_arr.append( clock_arr[i][int(np.argmax(pulse_arr[i]))] )
+
+
+        count1 = sum(1 for v in tpcid_arr if v <  60)
+        count2 = sum(1 for v in tpcid_arr if v >= 60)   
+
+
+        qsum_arr.append(sum(charge_arr))
+
+        if count2 > 3 and count1 > 3 and 1:
+
+            offset = min(maxsample_clock_arr)
+
+            for i in range(len(maxsample_clock_arr)):
+                maxsample_clock_arr[i] = (maxsample_clock_arr[i] - offset)
+                tmdiff_arr.append(maxsample_clock_arr[i] * 1.e6)
+            
+            reflist = charge_arr
+            q_lst = [0] * len(tpcs.ids)
+
+            for i in range(len(reflist)):
+                q_lst[int(tpcid_arr[i])] = int(reflist[i])
+                
+            cehck_list = q_lst
+            bins, colors = catview.get_color_list(cehck_list, cmap_name="ocean_r", fmt="hex")
+            color_array  = catview.get_color_array(cehck_list,bins,colors)
+
+            if 0:
+                tpcs.show_pads(
+                    plot_type='map', 
+                    color_map=color_array, 
+                    xrange=[-20,20],
+                    # yrange=[131,142],
+                    block_flag=False,
+                    savepath = None, #f"{savebase}/20250907/{figcount:5d}.png"
+                    check_id = True,
+                    check_size=3,
+                    check_data = tpcs.ids,
+                    canvassize = [8,7]
+                )
+            figcount += 1
+
+
+            up_vidx = within_range_indices(tpcid_arr, 0, 59)
+            dn_vidx = within_range_indices(tpcid_arr, 60, 119)
+
+            ups, uqs = calculate_position_charge(tpcs, up_vidx, tpcid_arr, charge_arr, maxsample_clock_arr)
+            dps, dqs = calculate_position_charge(tpcs, dn_vidx, tpcid_arr, charge_arr, maxsample_clock_arr)
+
+            uxs = [p[0] for p in ups]
+            dxs = [p[0] for p in dps]
+
+                        
+            uqsum.append(sum(uqs))
+            dqsum.append(sum(dqs))
+            uxg.append(calculate_weighted_average(uxs, uqs))
+            dxg.append(calculate_weighted_average(dxs, dqs))
+
+
+    if 1:
+        fig = make_subplots(rows=1, cols=2, vertical_spacing=0.15, horizontal_spacing=0.1,
+        subplot_titles=( "Total Charge", "Max Sample Timiming Difference" ))
 
         pau.add_sub_plot(fig,1,1,'1d',[qsum_arr],['Total Charge','Counts'],[200])
+        pau.add_sub_plot(fig,1,2,'1d',[tmdiff_arr],[r'$\Delta t [ns]$','Counts'],xrange=[0,1e6,20])
 
-        fig.update_layout( height=800, width=1600, showlegend=False,title_text=f"{input_finename}")
+        fig.update_layout( height=700, width=1400, showlegend=False,title_text=f"{input_finename}")
         fig.show()
         # saveutil.save_plotly(fig, base_dir=savebase)
 
@@ -316,29 +343,20 @@ def main(verbose):
 
         pau.add_sub_plot(fig,1,1,'1d',[uqsum],[r"$Q_{sum, up}$",'Counts'],[50])
         pau.add_sub_plot(fig,1,2,'1d',[dqsum],[r"$Q_{sum, down}$",'Counts'],[50])
-        pau.add_sub_plot(fig,1,3,'2d',[uqsum,dqsum],[r"$Q_{sum, up}$",r"$Q_{sum, down}$"],[50, 50], [False,False,False],[0,20e3],[0,20e3],True)
-        pau.add_sub_plot(fig,2,1,'1d',[uxg],[r"$x_{g, up}$",'Counts'],[50])
-        pau.add_sub_plot(fig,2,2,'1d',[dxg],[r"$x_{g, down}$",'Counts'],[50])
+        pau.add_sub_plot(fig,1,3,'2d',[uqsum,dqsum],[r"$Q_{sum, up}$",r"$Q_{sum, down}$"],[50, 50], [False,False,False])#,[0,20e3],[0,20e3],True)
+        pau.add_sub_plot(fig,2,1,'1d',[uxg],[r"$x_{g, up}$",'Counts'],xrange=[-20,20,1])
+        pau.add_sub_plot(fig,2,2,'1d',[dxg],[r"$x_{g, down}$",'Counts'],xrange=[-20,20,1])
         pau.add_sub_plot(fig,2,3,'2d',[uxg,dxg],[r"$x_{g, up}$",r"$x_{g, down}$"],[50, 50], [False,False,False],[-20,20],[-20,20],True)
 
         for trace in fig.data:
             if isinstance(trace, go.Heatmap):
-                # trace.xaxis の値は "x", "x2", "x3" など
                 xaxis = "xaxis" if trace.xaxis == "x" else "xaxis" + trace.xaxis[1:]
                 yaxis = "yaxis" if trace.yaxis == "y" else "yaxis" + trace.yaxis[1:]
 
-                # 各サブプロットの domain を取得
                 xa = fig.layout[xaxis].domain
                 ya = fig.layout[yaxis].domain
 
-                # カラーバーをサブプロットの右横に配置
-                trace.update(colorbar=dict(
-                    thickness=20,
-                    thicknessmode="pixels",
-                    x=xa[1] + 0.01,
-                    y=(ya[0] + ya[1]) / 2,
-                    len=ya[1] - ya[0] 
-                ))
+                trace.update(colorbar=dict(thickness=20, thicknessmode="pixels", x=xa[1] + 0.01, y=(ya[0] + ya[1]) / 2, len=ya[1] - ya[0]))
 
         fig.update_layout( height=800, width=1600, showlegend=False,title_text=f"{input_finename}")
         fig.show()
