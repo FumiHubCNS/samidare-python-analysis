@@ -39,7 +39,7 @@ def get_any_from_mapdf(mapdf, refLabel='sampaNo', refIDID=4):
     return matched
 
 def common_options(func):
-    @click.option('--text', '-t', default='tcpid', show_default=True, help='select the text values')
+    @click.option('--text', '-t', default='tpcid', show_default=True, help='select the text values')
     def wrapper(*args, **kwargs):
         return func(*args, **kwargs)
     return wrapper
@@ -89,17 +89,21 @@ def main(text):
 
     textdict = { "tpcid" : tpcs.ids , "chipid" : tpc_chip , "sampach" : tpc_channel}
 
+    # for i in range(len(pad2.ids)):
+    #     print(i, pad2.ids[i], padinfo.get_opopsite_id(i))
+        
+
     if 1:
-        cehck_list = tpc_chip
+        cehck_list = tpcs.ids
         bins, colors = catview.get_color_list(cehck_list, cmap_name="rainbow", fmt="hex")
         color_array  = catview.get_color_array(cehck_list,bins,colors)
         tpcs.show_pads(check_id=True, check_size=13, plot_type='map',color_map=color_array, check_data=textdict[text])
 
-    if 1:
+    if 0:
         for i in range(len(tpcs.ids)):
             print(f"{tpcs.ids[i]}, {tpcs.centers[i]}")
 
-    if 1:
+    if 0:
         for i in range(4):
             for j in range(32):
                 samid = get_id_from_mapdf(mapdf,i, j,'samidareID')

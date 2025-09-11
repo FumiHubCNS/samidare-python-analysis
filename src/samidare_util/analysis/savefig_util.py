@@ -9,7 +9,6 @@ from __future__ import annotations
 from pathlib import Path
 import time
 import datetime as dt
-from PIL import Image
 import glob
 import os
 import os, time, datetime as dt, glob
