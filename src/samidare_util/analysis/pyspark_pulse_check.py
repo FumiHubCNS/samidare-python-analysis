@@ -180,7 +180,7 @@ def main(name, date, verbose):
         pau.add_sub_plot(fig,2,2,'sparck-hist',[*data4],['max sample','Counts'])
 
         fig.update_layout( height=800, width=1000, showlegend=False,title_text=f"{input_finename}")
-        fig.show()
+        # fig.show()
 
         df_ts = df_aug.select("t0_ms", "maxsample").where(F.col("t0_ms").isNotNull() & F.col("maxsample").isNotNull())
         pdf = df_ts.toPandas()

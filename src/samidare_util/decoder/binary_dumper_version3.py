@@ -450,7 +450,7 @@ def byte_to_hex_and_int(val: int):
         raise
 
 def scan_stream(path: str, header, footer, timestamp1, timestamp2, timestamp3, 
-                chunk, limit, max_gap_bytes=None, footer_search_limit=60, 
+                chunk, limit, max_gap_bytes=None, footer_search_limit=58, 
                 output1=None, output2=None, binary_checker_flag=False, event_check_flag=False):
     """
     afaf(=header) 検出 → 直後60B以内で fafa(=footer) を2B境界で探索。
@@ -603,7 +603,6 @@ def scan_stream(path: str, header, footer, timestamp1, timestamp2, timestamp3,
                 out.append(f"{bs[i]:02x}")
             return " ".join(out)
 
-
         def emit_block(start_off, pairs, end_before_abs, tag_reason, dump_flag, event_data_check_flag):
 
             timestamp = None
@@ -618,10 +617,6 @@ def scan_stream(path: str, header, footer, timestamp1, timestamp2, timestamp3,
             timestamp1_flag = ( len(marker_hits['affa'])>0 )
             timestamp2_flag = ( len(marker_hits['faaf'])>0 )
             timestamp3_flag = ( len(marker_hits['fffa'])>0 )
-            footer_flag = ( len(marker_hits['fafa'])>0 )
-
-            flag_binary, length = pack_many_inverted(datasize_flag, timestamp1_flag, timestamp2_flag, timestamp3_flag, footer_flag)  # → 2
-            flag_debuger = flag_binary
 
             vals_hex = extract_values_after_markers(pairs, marker_hits)
             vals_int = {k: (int(v,16) if v is not None else None) for k, v in vals_hex.items()}
@@ -635,10 +630,21 @@ def scan_stream(path: str, header, footer, timestamp1, timestamp2, timestamp3,
             sample_index_byte = read_bytes_after(build_posmap(pairs), start_off+1, n=1)
 
             vals= None
+            
+            if tag_reason == "ok:footer-in-60B":
+                fafa_abs = end_before_abs - 4
+                footer_flag = True
+            else:
+                footer_flag = False
+
+            flag_binary, length = pack_many_inverted(datasize_flag, timestamp1_flag, timestamp2_flag, timestamp3_flag, footer_flag)  # → 2
+            flag_debuger = flag_binary
 
             if 2 - footer_flag - timestamp3_flag == 0:
-                start_pos = marker_hits['fffa'][0]+4 
-                end_before = marker_hits['fafa'][0] if len( marker_hits['fafa'] ) > 0 else end_before_abs
+                start_pos = marker_hits['fffa'][0] + 4
+                end_before = fafa_abs
+
+                # end_before = marker_hits['fafa'][0] if len( marker_hits['fafa'] ) > 0 else end_before_abs
                 vals = expand_10bit_units_from_pairs(pairs, start_pos, end_before, msb_first=True, fill_missing=0, pad_final_with_zeros=False)
 
             chip_number = int(chip_number_byte.hex(),16)
@@ -661,6 +667,7 @@ def scan_stream(path: str, header, footer, timestamp1, timestamp2, timestamp3,
 
             if dump_flag:
                 if flag_debuger >= 0:
+                # if flag_debuger >= 0 and (str(chip_number_byte.hex())=='00') and abs(timestamp - 78445085) <= 300:
                     print(
                         f"0x{start_off:08x}: {head_hex_col}"
                         + (f" {gap_str}" if gap_str else "")

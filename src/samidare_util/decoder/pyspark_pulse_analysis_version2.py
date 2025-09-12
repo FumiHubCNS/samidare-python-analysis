@@ -232,7 +232,7 @@ def find_pulse(grouped_samples, grouped_timestamp, grouped_chip, grouped_channel
     return ( filtered_grouped_samples, filtered_grouped_timestamp, filtered_grouped_chip, filtered_grouped_channel, filtered_grouped_event_id, filtered_grouped_times, \
             filtered_grouped_counts, filtered_grouped_max_sample, filtered_grouped_charge, filtered_grouped_total_charge )
 
-def add_sub_plot(fig,irow, icol, plot_type="1d",data=[],labels=[],bins=[200,200],logs=[False,False,True],xrange=[],yrange=[],debug=False):
+def add_sub_plot(fig,irow, icol, plot_type="1d",data=[],labels=[],bins=[200,200],logs=[False,False,True],xrange=[],yrange=[],debug=False, histdata=None):
 
     xtype = '-' if logs[0] == False else 'log'
     ytype = '-' if logs[1] == False else 'log'
@@ -300,7 +300,6 @@ def add_sub_plot(fig,irow, icol, plot_type="1d",data=[],labels=[],bins=[200,200]
         ncols = len(cols_range)
 
         index = (irow - 1) * ncols + (icol - 1)
-
         base_title = fig.layout.annotations[index].text 
         fig.layout.annotations[index].text = f"{base_title}, Entries:{int(counts.sum())}"
 
@@ -328,30 +327,51 @@ def add_sub_plot(fig,irow, icol, plot_type="1d",data=[],labels=[],bins=[200,200]
     
     elif plot_type == 'scatter':
         fig.add_trace(
-           go.Scatter(y=data[0], mode='lines+markers', name='timestamp', marker=dict(size=4),line=dict(width=1)),
+           go.Scatter(y=data[0], mode='lines+markers', marker=dict(size=4),line=dict(width=1)),
             row=irow, col=icol
         )
-        fig.update_xaxes(type=xtype, title_text=labels[0], row=irow, col=icol)
-        fig.update_yaxes(type=ytype, title_text=labels[1], row=irow, col=icol)
+        if len(labels) >=2:
+            fig.update_xaxes(type=xtype, title_text=labels[0], row=irow, col=icol)
+            fig.update_yaxes(type=ytype, title_text=labels[1], row=irow, col=icol)
 
+    elif plot_type == 'fit':
+        fig.add_trace(
+           go.Scatter(x=data[0], y=data[1], mode='lines', marker=dict(size=4),line=dict(width=2)),
+            row=irow, col=icol
+        )
+        if len(labels) >=2:
+            fig.update_xaxes(type=xtype, title_text=labels[0], row=irow, col=icol)
+            fig.update_yaxes(type=ytype, title_text=labels[1], row=irow, col=icol)
 
     elif plot_type == 'plot':
         fig.add_trace(
-           go.Scatter(x=data[0], y=data[1], mode='markers', name='timestamp', marker=dict(size=4),line=dict(width=1)),
+           go.Scatter(x=data[0], y=data[1], mode='markers', marker=dict(size=4),line=dict(width=1)),
             row=irow, col=icol
         )
-        fig.update_xaxes(type=xtype, title_text=labels[0], row=irow, col=icol)
-        fig.update_yaxes(type=ytype, title_text=labels[1], row=irow, col=icol)
-
+        if len(labels) >=2:
+            fig.update_xaxes(type=xtype, title_text=labels[0], row=irow, col=icol)
+            fig.update_yaxes(type=ytype, title_text=labels[1], row=irow, col=icol)
 
     elif plot_type == 'sparck-hist':
         fig.add_trace(
-            go.Bar(x=data[0], y=data[1], width=[1]*len(data[0])),
+            go.Bar(x=data[0], y=data[1]),
             row=irow, col=icol
         )
+        if len(labels) >=2:
+            fig.update_xaxes(type=xtype, title_text=labels[0], row=irow, col=icol)
+            fig.update_yaxes(type=ytype, title_text=labels[1], row=irow, col=icol)
 
-        fig.update_xaxes(type=xtype, title_text=labels[0], row=irow, col=icol)
-        fig.update_yaxes(type=ytype, title_text=labels[1], row=irow, col=icol)
+
+def align_colorbar(fig, thickness=20, thicknessmode="pixels"):
+    for trace in fig.data:
+        if isinstance(trace, go.Heatmap):
+            xaxis = "xaxis" if trace.xaxis == "x" else "xaxis" + trace.xaxis[1:]
+            yaxis = "yaxis" if trace.yaxis == "y" else "yaxis" + trace.yaxis[1:]
+
+            xa = fig.layout[xaxis].domain
+            ya = fig.layout[yaxis].domain
+
+            trace.update(colorbar=dict(thickness=20, thicknessmode="pixels", x=xa[1] + 0.01, y=(ya[0] + ya[1]) / 2, len=ya[1] - ya[0]))
 
 
 def build_event_and_find_pulse(input, output, dt, debug=False):

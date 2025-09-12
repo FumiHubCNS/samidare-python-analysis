@@ -20,6 +20,8 @@ sys.path.append(str(this_file_path.parent.parent.parent / "src"))
 
 def common_options(func):
     @click.option('--save', is_flag=True, help='output file generation flag')
+    @click.option('--file'   , type=str, default=None, help='file name without .bin')
+    @click.option('--dir'    , type=str, default=None, help='base directory name')
 
     def wrapper(*args, **kwargs):
         return func(*args, **kwargs)
@@ -102,7 +104,7 @@ def add_event_id_anchor(df, time_col: str = "t0_ms", threshold_ms: float = 50.0,
 
 @click.command(context_settings=dict(help_option_names=['-h', '--help']))
 @common_options
-def main(save):
+def main(save, file, dir):
 
     toml_file_path = this_file_path  / "../../../parameters.toml"
 
@@ -110,6 +112,13 @@ def main(save):
         config = toml.load(f)
 
     fileinfo = config["fileinfo"]
+
+    if dir is not None:
+        fileinfo["base_output_path"] = dir
+
+    if file is not None:
+        fileinfo["input_file_name"] = file
+
     base_path = fileinfo["base_output_path"]  + "/" + fileinfo["input_file_name"] 
     input  = base_path + "_pulse.parquet"
     output = base_path + "_phys.parquet"
