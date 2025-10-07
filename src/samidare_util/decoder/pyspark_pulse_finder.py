@@ -388,20 +388,48 @@ def main(rise, fall, pren, postn, minlen, maxevt, checkts, checkpf, duration, sa
 
     find_pulse_v3 = make_find_pulse_udf_v3(RISE_THR=rise, FALL_THR=fall, PRE_BUF=pren, POST_BUF=postn, MIN_LEN=minlen)
 
+    # df_pulses = (
+    #     df2 
+    #     .select( 
+    #         find_pulse_v3(F.col("pulse_sub"), F.col("timestamp"), F.col("chip")).alias("items")
+    #     )
+    #     .select(F.explode_outer("items").alias("p"))      
+    #     .select(
+    #         F.col("p.original").alias("original_pulse"),
+    #         F.col("p.pulse").alias("pulse"),
+    #         F.col("p.index").alias("pulse_index"),
+    #         F.col("p.time").alias("pulse_timestamp"),    
+    #         F.col("p.chip").alias("chip"),
+    #         F.col("p.channel").alias("channel"),
+    #     )
+    # )
+
+    # df_plot = (
+    #     df_pulses
+    #     .withColumn("t0_ms", F.element_at("pulse_timestamp", 1).cast("double")/F.lit(320000.0))
+    #     # .withColumn("t0_ms", F.element_at("pulse_timestamp", 1)/F.lit(32.00) * F.lit(3.125) / F.lit(1e6))
+    #     .where(F.col("t0_ms").isNotNull())
+    #     .select("chip", "channel", "t0_ms", "pulse", "pulse_index", "pulse_timestamp","original_pulse")  # ← ここで保持
+    #     .orderBy("t0_ms")
+    # )
+
     df_pulses = (
-        df2 
-        .select( 
+        df2
+        .select(
+            "chip", "timestamp", "samples_value", "pulse_sub",  # ★ 一緒に残す
             find_pulse_v3(F.col("pulse_sub"), F.col("timestamp"), F.col("chip")).alias("items")
         )
-        .select(F.explode_outer("items").alias("p"))      
+        .select("chip", "timestamp", "samples_value", F.explode_outer("items").alias("p"))  # ★ 残す
         .select(
+            "chip", "timestamp", "samples_value",                # ★ 残す
             F.col("p.original").alias("original_pulse"),
             F.col("p.pulse").alias("pulse"),
             F.col("p.index").alias("pulse_index"),
-            F.col("p.time").alias("pulse_timestamp"),    
-            F.col("p.chip").alias("chip"),
+            F.col("p.time").alias("pulse_timestamp"),
+            F.col("p.chip").alias("chip_from_udf"),
             F.col("p.channel").alias("channel"),
         )
+        .drop("chip").withColumnRenamed("chip_from_udf", "chip") # 必要ならUDFのchipを採用
     )
 
     df_plot = (
@@ -409,31 +437,39 @@ def main(rise, fall, pren, postn, minlen, maxevt, checkts, checkpf, duration, sa
         .withColumn("t0_ms", F.element_at("pulse_timestamp", 1).cast("double")/F.lit(320000.0))
         # .withColumn("t0_ms", F.element_at("pulse_timestamp", 1)/F.lit(32.00) * F.lit(3.125) / F.lit(1e6))
         .where(F.col("t0_ms").isNotNull())
-        .select("chip", "channel", "t0_ms", "pulse", "pulse_index", "pulse_timestamp","original_pulse")  # ← ここで保持
+        .select("chip", "channel", "t0_ms", "pulse", "pulse_index", "pulse_timestamp","original_pulse","samples_value")  # ← ここで保持
         .orderBy("t0_ms")
     )
 
     if 0:
-        fig, ax = plt.subplots(1, 1, figsize=(4, 4), constrained_layout=True)
+        fig, ax = plt.subplots(1, 1, figsize=(10, 8), constrained_layout=True)
         for row in islice(df_plot.toLocalIterator(), maxevt):  # ← 5000件だけ
             x       = row["pulse_index"]
             y       = row["pulse"]
-            oy      = row["original_pulse"]
-            id = row["channel"]
+            by      = row["original_pulse"]
+            oy      = row["samples_value"][15] 
+            id      = row["channel"]
             ox=[]
+            bx=[]
 
+            for i in range(len(by)):
+                bx.append(i)
+            
             for i in range(len(oy)):
                 ox.append(i)
 
             if id ==15:
-                ax.plot(ox,oy,lw=1, alpha=0.5, marker="o", markersize=2, label=f"original", color='black')
-                ax.plot(x,y,lw=1, alpha=0.5, marker="o", markersize=2, label=f"found pulse", color='red')
+                ax.plot(ox,oy,lw=2, alpha=0.5, marker="o", markersize=6, label=f"original pulse", color='gray')
+                ax.plot(ox,by,lw=2, alpha=0.5, marker="o", markersize=6, label=f"subtracted pulse", color='black')
+                ax.plot(x,y,lw=2, alpha=0.5, marker="o", markersize=6, label=f"extract pulse", color='red')
 
-                ax.set(xlim=(0, 64), ylim=(-50, 950))
-                ax.set_title(f"pulse @ chip{0}")     
-                ax.set_xlabel("Sample index")
-                ax.set_ylabel("Sample value - Base line(mode value)")   
-                ax.legend(loc='upper right', ncol=3, fontsize=10)
+
+                ax.set(xlim=(-1, 65), ylim=(-50, 300))
+                ax.set_title(f"pulse @ chip{0} channel{15}",fontsize=20)     
+                ax.set_xlabel("Sample index",fontsize=18)
+                ax.tick_params(axis='both', labelsize=16)    
+                ax.set_ylabel("Sample value - Base line (mode value)",fontsize=18)   
+                ax.legend(loc='upper right', ncol=1, fontsize=16)
                 plt.show(block=True)  
 
 

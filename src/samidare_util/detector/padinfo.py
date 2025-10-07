@@ -124,3 +124,5 @@ def main():
 
 if __name__ == '__main__':
   main()
+  # pad = get_tpc_info(0)
+  # pad.show_pads()

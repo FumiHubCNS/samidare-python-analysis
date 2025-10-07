@@ -36,13 +36,16 @@ sys.path.append(str(this_file_path.parent.parent.parent / "src"))
 import samidare_util.detector.padinfo as padinfo
 
 def common_options(func):   
-    @click.option('--verbose', '-v', is_flag=True, help='verbose flag')
+    @click.option('--maxevt'  , '-m'  , type=int, default=-1, help='maximum load row number')
     
     def wrapper(*args, **kwargs):
         return func(*args, **kwargs)
     return wrapper
 
 import numpy as np
+
+def _pol1(x,a,b):
+    return a * x + b
 
 def _gauss(x, A, mu, sigma):
     return A * np.exp(-(x - mu)**2 / (2.0 * sigma**2))
@@ -205,6 +208,18 @@ def calculate_energy_deposit(val, a=0.2327, b=2.375, Cg=4.0, Cmv=1.953, W=26e-3,
     Qmeas = Qch * Cmv / Cg
     dE = Qmeas / (( e / W ) * Gg )
     return dE
+
+def calculate_energy_gain(val, a=0.2327, b=2.375, Cg=4.0, Cmv=1.953, W=26e-3, e=1.602e-4, dE=133.):
+    Qch   = val * a + b
+    Qmeas = Qch * Cmv / Cg
+    Gg = Qmeas / (( e / W ) * dE )
+
+    return Gg
+
+def calculate_energy_conversion_factor(a=0.2327, b=2.375, Cg=4.0, Cmv=1.953, W=26e-3, e=1.602e-4, Gg=2781.):
+    coeff0 = a*Cmv*W/(Cg*e*Gg) 
+    coeff1 = b*Cmv*W/(Cg*e*Gg) 
+    return [coeff0, coeff1]
 
 def check_fit_alg(x,y,q):
 
@@ -546,6 +561,24 @@ def get_pads():
     pad1 = padinfo.get_tpc_info(offset+45)
     pad2 = padinfo.get_tpc_info(offset+136.5,False)
     tpcs = padinfo.marge_padinfos(pad1,pad2)
+    tpcs.dedxinfo = {
+        "Am241": { 
+            "tke": 5.5,
+            "up":   { "de[keV]": 133.3, "sigma_de[keV/u]": 0.002, "sigma_angle[mrad]": 7.3441},
+            "down": { "de[keV]": 175.7, "sigma_de[keV/u]": 0.002, "sigma_angle[mrad]": 11.733},
+            },
+        "Cm244": { 
+            "tke": 5.8,
+            "up":   { "de[keV]": 129.8, "sigma_de[keV/u]": 0.002, "sigma_angle[mrad]": 6.8752},
+            "down": { "de[keV]": 162.9, "sigma_de[keV/u]": 0.002, "sigma_angle[mrad]": 10.284},
+            },
+        "Np237": { 
+            "tke": 4.959,
+            "up":   { "de[keV]": 145.6, "sigma_de[keV/u]": 0.002, "sigma_angle[mrad]":  8.3864},
+            "down": { "de[keV]": 209.9, "sigma_de[keV/u]": 0.002, "sigma_angle[mrad]": 16.1315},
+            },
+    }
+
     return tpcs
 
 
@@ -586,8 +619,8 @@ def check_tpc_map(data=None, input_finename="", savebase=None, save_flag=False):
     fig = make_subplots(rows=1, cols=2, vertical_spacing=0.15, horizontal_spacing=0.1,
         subplot_titles=( "Samidare ID", "TPC ID" ))
 
-    pau.add_sub_plot(fig,1,1,'sparck-hist',[df1["samidare_id"],df1["count"]],['Samidare ID','Counts'])
-    pau.add_sub_plot(fig,1,2,'sparck-hist',[df2["tpc_id"],df2["count"]],['TPC ID','Counts'])
+    pau.add_sub_plot(fig,1,1,'spark-hist',[df1["samidare_id"],df1["count"]],['Samidare ID','Counts'])
+    pau.add_sub_plot(fig,1,2,'spark-hist',[df2["tpc_id"],df2["count"]],['TPC ID','Counts'])
 
     fig.update_layout( height=800, width=1600, showlegend=False,title_text=f"{input_finename}")
     fig.show()
@@ -599,17 +632,21 @@ def check_tpc_map(data=None, input_finename="", savebase=None, save_flag=False):
 def check_hq(df1=None, df2=None, input_finename="", savebase=None, save_flag=False):
     data1 = df1.toPandas()
     data2 = df2.toPandas()
+    res = fit_line_ols(data1["charge"],data1["maxsample"])
+    print(f"a = {res['slope']:.5f}, b = {res["intercept"]:.5f} (chrage < 4000)")
+    fitx =  np.linspace(0,4000, 5)
+    fity = _pol1(fitx,res['slope'],res["intercept"])
 
-    fig = make_subplots(rows=1, cols=2, vertical_spacing=0.15, horizontal_spacing=0.1,subplot_titles=("h x q (raw)","h x q (valid)",))
+
+    fig = make_subplots(rows=1, cols=2, vertical_spacing=0.15, horizontal_spacing=0.1,subplot_titles=("h x q (raw)",f"h x q (valid), a = {res['slope']:.3f}, b = {res["intercept"]:.3f}",))
     pau.add_sub_plot(fig,1,1,'2d',[data2["charge"],data2["maxsample"]],["Charge [ch]"," Max Sample [ch]"],[500,500],yrange=[0,1100],xrange=[0,6000])
     pau.add_sub_plot(fig,1,2,'2d',[data1["charge"],data1["maxsample"]],["Charge [ch]"," Max Sample [ch]"],[500,500],yrange=[0,1100],xrange=[0,6000])
+    pau.add_sub_plot(fig,1,2,'fit',[fitx, fity])
     fig.update_layout( height=700, width=1400, showlegend=False,title_text=f"{input_finename}")
     fig.show()
 
     if save_flag and savebase is not None:
         saveutil.save_plotly(fig, base_dir=savebase)
-
-    return data2
 
 def check_nq(data=None, input_finename="", savebase=None, save_flag=False):
     df_fit = data
@@ -626,9 +663,11 @@ def check_nq(data=None, input_finename="", savebase=None, save_flag=False):
     if save_flag and savebase is not None:
         saveutil.save_plotly(fig, base_dir=savebase)
 
-def check_hit_patturn(data,block_flag=False,check_flag=True):
+def check_hit_patturn(data,block_flag=False,check_flag=True, savefilepath=None, dpi=300, maxevt=-1):
 
     tpcs = get_pads()
+
+    figcount = 0
 
     for ev in data.toLocalIterator():
         N_up = ev["N_up"]
@@ -637,6 +676,9 @@ def check_hit_patturn(data,block_flag=False,check_flag=True):
         intercept = ev["a_intercept"]
 
         if N_up > 3 and N_dn > 3 :
+
+            if figcount == maxevt:
+                break 
 
             tpcid_arr = list(ev["tpc_ids"] or [])
             de_arr    = list(ev["energy_deposits_keV"] or [])
@@ -654,6 +696,7 @@ def check_hit_patturn(data,block_flag=False,check_flag=True):
 
             tracks  = []
             tracks.append(["line",[1/slope, -intercept/slope], [40,141], [1,'red']])
+            outputpath = f"{savefilepath}/{figcount:05d}.png" if savefilepath else None
 
             tpcs.show_pads(
                 plot_type='map', 
@@ -661,13 +704,16 @@ def check_hit_patturn(data,block_flag=False,check_flag=True):
                 xrange=[-20,20],
                 yrange=[38,142],
                 block_flag=block_flag,
-                savepath = None,#f"{savebase}/20250911/{figcount:5d}.png",
+                savepath = outputpath,
                 check_id = check_flag,
                 check_size=3,
                 check_data = tpcs.ids,
                 canvassize = [8,7],
-                tracks=tracks
+                tracks=tracks,
+                dpi=dpi
             )
+
+            figcount += 1
 
 def check_fit_result(data, input_finename="", savebase=None, save_flag=False):
     data1 = data.toPandas()
@@ -683,7 +729,7 @@ def check_fit_result(data, input_finename="", savebase=None, save_flag=False):
     if save_flag and savebase is not None:
         saveutil.save_plotly(fig, base_dir=savebase)
 
-def check_tpc_position_charge_correction(df, input_finename="", savebase=None, save_flag=False):
+def check_tpc_position_charge_correction(df, input_finename="", savebase=None, save_flag=False, a_val=0.22372, b_val=8.56488):
 
     data = df.toPandas()
 
@@ -698,8 +744,8 @@ def check_tpc_position_charge_correction(df, input_finename="", savebase=None, s
         )
     )
 
-    pau.add_sub_plot(fig,1,1,'1d',[data["ΔE_up"]],[r"$Q_{sum, up}$",'Counts'],xrange=[10,310,5])
-    pau.add_sub_plot(fig,1,2,'1d',[data["ΔE_dn"]],[r"$Q_{sum, down}$",'Counts'],xrange=[10,310,5])
+    pau.add_sub_plot(fig,1,1,'1d',[data["ΔE_up"]],[r"$Q_\mathrm{sum, up} \mathrm{[keV]}$",r'$\mathrm{Counts}$'],xrange=[10,310,5])
+    pau.add_sub_plot(fig,1,2,'1d',[data["ΔE_dn"]],[r"$Q_\mathrm{sum, down} \mathrm{[keV]}$",r'$\mathrm{Counts}$'],xrange=[10,310,5])
     pau.add_sub_plot(fig,1,3,'2d',[data["ΔE_up"],data["ΔE_dn"]],[r"$Q_{sum, up}$",r"$Q_{sum, down}$"],[100, 100], [False,False,False],[10,310],[10,310],True)
     pau.add_sub_plot(fig,2,1,'1d',[data["x_ug"]],[r"$x_{g, up}$",'Counts'],xrange=[-20,20,1])
     pau.add_sub_plot(fig,2,2,'1d',[data["x_dg"]],[r"$x_{g, down}$",'Counts'],xrange=[-20,20,1])
@@ -707,6 +753,67 @@ def check_tpc_position_charge_correction(df, input_finename="", savebase=None, s
     pau.align_colorbar(fig)
     fig.update_layout(height=800, width=1600, showlegend=False,title_text=f"{input_finename}")
     fig.show()
+
+    if save_flag and savebase is not None:
+        saveutil.save_plotly(fig, base_dir=savebase)
+
+
+    df_valid = (df
+                .withColumn("slope", F.try_divide(F.lit(1.0) , F.col("a_slope")))
+                .withColumn("intercept", F.try_divide(F.lit(-1.0) * F.col("a_intercept") , F.col("a_slope")))
+                .filter( F.col("Q_dn") > 10e3 )
+                .filter( F.col("Q_dn") < 30e3 )
+                .filter( F.col("Q_up") > 10e3 )
+                .filter( F.abs(F.col("slope")) < 0.05 )
+                .filter( F.abs(F.col("x_ug")) < 10. )
+            )
+    
+    data_valid = df_valid.toPandas()
+
+
+    counts1, centers1, edges1 = make_hist(data_valid["Q_up"], nbins=50, data_range=(10e3, 30e3))
+    params1, info1 = fit_gaussian(centers1, counts1, fit_range=(15e3, 25e3) )
+    fitx1 = np.linspace(15e3, 25e3,400)
+    fity1 = _gauss(fitx1, params1["A"], params1["mu"], params1["sigma"])
+
+    counts2, centers2, edges2 = make_hist(data_valid["Q_dn"], nbins=50, data_range=(20e3, 40e3))
+    params2, info2 = fit_gaussian( centers2, counts2, fit_range=(20e3, 30e3) )
+    fitx2 = np.linspace(20e3, 30e3,400)
+    fity2 = _gauss(fitx2, params2["A"], params2["mu"], params2["sigma"])
+
+    fig = make_subplots(rows=1, cols=2, vertical_spacing=0.15, horizontal_spacing=0.1,
+        subplot_titles=( 
+            f"upstream tpc total charge (valid), fit result mu: {params1["mu"]:.2f} ", 
+            f"downstream tpc total charge (valid), fit result mu: {params2["mu"]:.2f} "
+        )
+    )
+
+    pau.add_sub_plot(fig,1,1,'spark-hist',[centers1,counts1],[r'$Q_{\mathrm{up}} {\mathrm{[keV]}$','Counts'])
+    pau.add_sub_plot(fig,1,1,'fit',[fitx1, fity1])
+    pau.add_sub_plot(fig,1,2,'spark-hist',[centers2,counts2],[r'$Q_{\mathrm{up}} {\mathrm{[keV]}$','Counts'])
+    pau.add_sub_plot(fig,1,2,'fit',[fitx2, fity2])
+
+    fig.update_layout(height=600, width=1200, showlegend=False,title_text=f"{input_finename}")
+    fig.show()
+
+    deinfo = get_pads()
+    de1 = (deinfo.dedxinfo["Am241"]["up"]["de[keV]"] + deinfo.dedxinfo["Cm244"]["up"]["de[keV]"] + deinfo.dedxinfo["Np237"]["up"]["de[keV]"]) / 3.0
+    de2 = (deinfo.dedxinfo["Am241"]["down"]["de[keV]"] + deinfo.dedxinfo["Cm244"]["down"]["de[keV]"])/ 2.0
+
+    print(f"[debug] de={de1} a={a_val} b={b_val} mu={params1["mu"]}")
+    print(f"[debug] de={de2} a={a_val} b={b_val} mu={params2["mu"]}")
+
+    g1 = calculate_energy_gain(params1["mu"], dE=de1, a=a_val, b=b_val)
+    g2 = calculate_energy_gain(params2["mu"], dE=de2, a=a_val, b=b_val)
+
+    print(f"Gain (P10@20kPa, upstream   tpc): {g1}")
+    print(f"Gain (P10@20kPa, downstream tpc): {g2}")
+
+    c1 = calculate_energy_conversion_factor(Gg=g1 ,a=a_val, b=b_val)
+    c2 = calculate_energy_conversion_factor(Gg=g2 ,a=a_val, b=b_val)
+
+    print(f"Conversion Factor (P10@20kPa, upstream   tpc): {c1}")
+    print(f"Conversion Factor (P10@20kPa, downstream tpc): {c2}")
 
     if save_flag and savebase is not None:
         saveutil.save_plotly(fig, base_dir=savebase)
@@ -720,7 +827,7 @@ def check_energy_resolution(df_plot1, input_finename="", savebase=None, save_fla
     fity = _gauss(fitx, params["A"], params["mu"], params["sigma"])
 
     fig = make_subplots(rows=2, cols=2, vertical_spacing=0.15, horizontal_spacing=0.1, subplot_titles=(f"Qdif fit sigma :{params["sigma"]}","xg vs slope","xg vs Qdif","slope vs Qdif"))
-    pau.add_sub_plot(fig,1,1,'sparck-hist',[centers,counts],[r'$\frac{Q_{1}+Q_{3}}{2} - Q_{2} \mathrm{[keV]}$','Counts'],xrange=[100])
+    pau.add_sub_plot(fig,1,1,'spark-hist',[centers,counts],[r'$\frac{Q_{1}+Q_{3}}{2} - Q_{2} \mathrm{[keV]}$','Counts'],xrange=[100])
     pau.add_sub_plot(fig,1,1,'fit',[fitx, fity])
     pau.add_sub_plot(fig,1,2,'2d',[data["x_ug"], data["slope"]],['wighted x position (upstream) [mm]','slope'],[100,100],[False,False,False],xrange=[-20,20],yrange=[-1,1])
     pau.add_sub_plot(fig,2,1,'2d',[data["x_ug"], data["Qdiff"]],['wighted x position (upstream) [mm]',r'$\frac{Q_{1}+Q_{3}}{2} - Q_{2}$ [keV]'],[100,100],[False,False,False],xrange=[-20,20],yrange=[-20,20])
@@ -768,7 +875,7 @@ def cmean(cond, expr):
 
 @click.command(context_settings=dict(help_option_names=['-h', '--help']))
 @common_options
-def main(verbose):
+def main(maxevt):
 
     toml_file_path = this_file_path  / "../../../parameters.toml"
 
@@ -823,15 +930,45 @@ def main(verbose):
     df = spark.read.parquet(input)    
 
     #################### convert to physics values ####################
-    df_gid = (df
-        .join(F.broadcast(df_map), df["samidare_id"] == df_map["map_samidare_id"], "left")
-        .drop("map_samidare_id")
-        .withColumnRenamed("gid_mapped", "tpc_id")
-        .withColumn("maxsample_index_raw", F.array_position(F.col("pulse"), F.array_max(F.col("pulse"))))
-        .withColumn("maxsample_index", F.when(F.col("maxsample_index_raw") <= 0, F.lit(None).cast("int")).otherwise(F.col("maxsample_index_raw").cast("int")))
-        .withColumn("maxsample_timing_ms", (F.element_at(F.col("times"), F.col("maxsample_index")) / F.lit(320000.0)).cast("double"))
-        .withColumn("energy_deposit_keV", F.col("charge") * F.lit(0.007205263158))
-    )
+    coef_up_a,     coef_up_b = 0.007594825219782722, 0.2907597292526938
+    coef_down_a, coef_down_b = 0.006512604389126628, 0.24932806669203858
+
+    if maxevt >= 0:
+        df_gid = (df
+            .join(F.broadcast(df_map), df["samidare_id"] == df_map["map_samidare_id"], "left")
+            .drop("map_samidare_id")
+            .withColumnRenamed("gid_mapped", "tpc_id")
+            .withColumn("maxsample_index_raw", F.array_position(F.col("pulse"), F.array_max(F.col("pulse"))))
+            .withColumn("maxsample_index", F.when(F.col("maxsample_index_raw") <= 0, F.lit(None).cast("int")).otherwise(F.col("maxsample_index_raw").cast("int")))
+            .withColumn("maxsample_timing_ms", (F.element_at(F.col("times"), F.col("maxsample_index")) / F.lit(320000.0)).cast("double"))
+            .withColumn(
+                "energy_deposit_keV",
+                F.when(F.col("tpc_id").between( 0,  59), F.col("charge") * F.lit(coef_up_a) + F.lit(coef_up_b)) 
+                .when(F.col("tpc_id" ).between(60, 119), F.col("charge") * F.lit(coef_down_a) + F.lit(coef_down_b))
+                .otherwise(F.lit(None).cast("double"))
+            )
+            .limit(maxevt)
+        )
+    else:
+        df_gid = (df
+            .join(F.broadcast(df_map), df["samidare_id"] == df_map["map_samidare_id"], "left")
+            .drop("map_samidare_id")
+            .withColumnRenamed("gid_mapped", "tpc_id")
+            .withColumn("maxsample_index_raw", F.array_position(F.col("pulse"), F.array_max(F.col("pulse"))))
+            .withColumn("maxsample_index", F.when(F.col("maxsample_index_raw") <= 0, F.lit(None).cast("int")).otherwise(F.col("maxsample_index_raw").cast("int")))
+            .withColumn("maxsample_timing_ms", (F.element_at(F.col("times"), F.col("maxsample_index")) / F.lit(320000.0)).cast("double"))
+            .withColumn(
+                "energy_deposit_keV",
+                F.when(F.col("tpc_id").between( 0,  59), F.col("charge") * F.lit(coef_up_a) + F.lit(coef_up_b)) 
+                .when(F.col("tpc_id" ).between(60, 119), F.col("charge") * F.lit(coef_down_a) + F.lit(coef_down_b))
+                .otherwise(F.lit(None).cast("double"))
+            )
+        )
+
+    dft =  df_gid.select("energy_deposit_keV")
+    data = dft.toPandas()
+    plt.hist(data.energy_deposit_keV, bins=100)
+    plt.show()  
 
     tpcs = get_pads()
     pad_rows = [(int(tid), float(c[0]), float(c[2])) for tid, c in zip(tpcs.ids, tpcs.centers)]
@@ -918,6 +1055,7 @@ def main(verbose):
     df_evt = df_evt.join(df_odr, on=["event_id"], how="left")
 
     #################### plot ####################
+
     if 0:
         df_plot = (df_gid.filter(df_gid['tpc_id'] >= 0).orderBy("maxsample_timing_ms"))
         check_tpc_map(df_plot, input_finename)
@@ -925,15 +1063,24 @@ def main(verbose):
     if 0:
         df_plot1 = (df_gid.filter(df_gid['tpc_id'] >= 0).filter( F.col("charge") < 4000)).select("charge","maxsample")
         df_plot2 = (df_gid.filter(df_gid['tpc_id'] >= 0)).select("charge","maxsample")
-        data2 = check_hq(df_plot1, df_plot2) 
-        res = fit_line_ols(data2["charge"],data2["maxsample"])
-        print(f"a = {res['slope']:.5f}, b = {res["intercept"]:.5f} (chrage < 4000)")
+        check_hq(df_plot1, df_plot2) 
 
     if 0:
         check_nq(df_evt)
 
     if 0:
-        check_hit_patturn(df_evt)
+        df_plot7 = (df_evt
+            .filter( F.col("Q_up") < 30e3 )
+            .filter( F.col("Q_dn") > 20e3 )
+            .filter( F.col("N_dn") < 13 )
+            .filter( F.col("N_up") < 13 )
+            )
+        
+        if 0:
+            basesavepath = f"{savebase}/20250914"
+            check_hit_patturn(df_plot7, savefilepath=basesavepath, dpi=600, maxevt=120)
+        else:
+            check_hit_patturn(df_plot7)
 
     if 0:
         df_plot3 = (df_evt
@@ -946,10 +1093,9 @@ def main(verbose):
         check_fit_result(df_plot3)
 
     if 0:
-        df_plot4 = (df_evt.select("x_ug","x_dg","ΔE_up","ΔE_dn"))
-        check_tpc_position_charge_correction(df_plot4)
+        df_plot4 = (df_evt.select("x_ug","x_dg","ΔE_up","ΔE_dn","a_slope","a_intercept","Q_up", "Q_dn"))
+        check_tpc_position_charge_correction(df_plot4, a_val=0.22372, b_val=8.56488)
 
-    if 0:
         df_plot5 = (df_evt
                     .select("ΔE_up1","ΔE_up2","ΔE_up3","x_ug","a_slope","a_intercept")
                     .withColumn("Qdiff", ( F.col("ΔE_up1") + F.col("ΔE_up3") ) / F.lit(2.) - F.col("ΔE_up2"))
@@ -993,14 +1139,14 @@ def main(verbose):
         print(f"Schema (df_evt) merge df_odr and df_hit")
         df_evt.printSchema()
 
-    # if 0:
-    #     saveutil.generate_gif(
-    #         input_dir=f"{savebase}/20250911",   
-    #         output_dir=f"{savebase}/gifs",      
-    #         duration_s=0.2,                   
-    #         pattern="*.png",          
-    #         sort_by="ctime",               
-    #     )
+    if 0:
+        saveutil.generate_gif(
+            input_dir=f"{savebase}/20250914",   
+            output_dir=f"{savebase}/gifs",      
+            duration_s=0.2,                   
+            pattern="*.png",          
+            sort_by="ctime",               
+        )
 
 if __name__ == '__main__':
     main()

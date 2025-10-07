@@ -7,6 +7,7 @@ import numpy as np
 import toml
 import pathlib
 import sys
+import re 
 
 this_file_path = pathlib.Path(__file__).parent
 sys.path.append(str(this_file_path.parent.parent.parent / "src"))
@@ -232,7 +233,7 @@ def find_pulse(grouped_samples, grouped_timestamp, grouped_chip, grouped_channel
     return ( filtered_grouped_samples, filtered_grouped_timestamp, filtered_grouped_chip, filtered_grouped_channel, filtered_grouped_event_id, filtered_grouped_times, \
             filtered_grouped_counts, filtered_grouped_max_sample, filtered_grouped_charge, filtered_grouped_total_charge )
 
-def add_sub_plot(fig,irow, icol, plot_type="1d",data=[],labels=[],bins=[200,200],logs=[False,False,True],xrange=[],yrange=[],debug=False, histdata=None):
+def add_sub_plot(fig,irow, icol, plot_type="1d",data=[],labels=[],bins=[200,200],logs=[False,False,True],xrange=[],yrange=[],debug=False, legends=None, dataname=None, color=None ):
 
     xtype = '-' if logs[0] == False else 'log'
     ytype = '-' if logs[1] == False else 'log'
@@ -240,7 +241,7 @@ def add_sub_plot(fig,irow, icol, plot_type="1d",data=[],labels=[],bins=[200,200]
     if plot_type == '1d':
         if len(xrange) < 2:
             fig.add_trace(
-                go.Histogram(x=data[0],nbinsx=bins[0]),
+                go.Histogram(x=data[0],nbinsx=bins[0],name=dataname),
                 row=irow, col=icol
             )
         else:
@@ -251,12 +252,11 @@ def add_sub_plot(fig,irow, icol, plot_type="1d",data=[],labels=[],bins=[200,200]
                         start=xrange[0],   
                         end=xrange[1], 
                         size=xrange[2] 
-                    )
+                    ),
+                    name=dataname
                 ),
                 row=irow, col=icol
             )
-        fig.update_xaxes(type=xtype, title_text=labels[0], row=irow, col=icol)
-        fig.update_yaxes(type=ytype, title_text=labels[1], row=irow, col=icol)
 
     elif plot_type == '2d':
         x = data[0]
@@ -277,6 +277,8 @@ def add_sub_plot(fig,irow, icol, plot_type="1d",data=[],labels=[],bins=[200,200]
         if logs[2]:
             counts = np.log10(counts + 1)
 
+        bar_title = "ln(+1)" if logs[2] else "Count" 
+
         xcenters = 0.5 * (xedges[:-1] + xedges[1:])
         ycenters = 0.5 * (yedges[:-1] + yedges[1:])
 
@@ -286,14 +288,12 @@ def add_sub_plot(fig,irow, icol, plot_type="1d",data=[],labels=[],bins=[200,200]
             z=counts.T,
             colorscale="Viridis",
             colorbar=dict(
-                title="Count"
-            )
+                title=bar_title
+            ),
+            name=dataname
         )
         
         fig.add_trace(heatmap, row=irow, col=icol)
-
-        fig.update_xaxes(type=xtype, title_text=labels[0], row=irow, col=icol)
-        fig.update_yaxes(type=ytype, title_text=labels[1], row=irow, col=icol)
 
         rows_range, cols_range = fig._get_subplot_rows_columns()
         nrows = len(rows_range)
@@ -326,41 +326,65 @@ def add_sub_plot(fig,irow, icol, plot_type="1d",data=[],labels=[],bins=[200,200]
             print(f"[debug] Entries {total_count}, Max value {max_val} at ({x_at_max},{y_at_max}), Min value {min_val} at ({x_at_min},{y_at_min})")
     
     elif plot_type == 'scatter':
-        fig.add_trace(
-           go.Scatter(y=data[0], mode='lines+markers', marker=dict(size=4),line=dict(width=1)),
-            row=irow, col=icol
-        )
-        if len(labels) >=2:
-            fig.update_xaxes(type=xtype, title_text=labels[0], row=irow, col=icol)
-            fig.update_yaxes(type=ytype, title_text=labels[1], row=irow, col=icol)
+        if color is not None:
+            fig.add_trace(
+            go.Scatter(y=data[0], mode='lines+markers', marker=dict(size=4,color=color),line=dict(width=1,color=color),name=dataname),
+                row=irow, col=icol
+            )
+        else:
+            fig.add_trace(
+            go.Scatter(y=data[0], mode='lines+markers', marker=dict(size=4),line=dict(width=1),name=dataname),
+                row=irow, col=icol
+            )            
 
     elif plot_type == 'fit':
-        fig.add_trace(
-           go.Scatter(x=data[0], y=data[1], mode='lines', marker=dict(size=4),line=dict(width=2)),
-            row=irow, col=icol
-        )
-        if len(labels) >=2:
-            fig.update_xaxes(type=xtype, title_text=labels[0], row=irow, col=icol)
-            fig.update_yaxes(type=ytype, title_text=labels[1], row=irow, col=icol)
+        if color is not None:
+            fig.add_trace(
+            go.Scatter(x=data[0], y=data[1], mode='lines', marker=dict(size=4,color=color),line=dict(width=2,color=color),name=dataname),
+                row=irow, col=icol,
+            )
+        else:
+            fig.add_trace(
+            go.Scatter(x=data[0], y=data[1], mode='lines', marker=dict(size=4),line=dict(width=2),name=dataname),
+                row=irow, col=icol,
+            )
 
     elif plot_type == 'plot':
+        if color is not None:
+            fig.add_trace(
+            go.Scatter(x=data[0], y=data[1], mode='markers', marker=dict(size=8,color=color),line=dict(width=1,color=color),name=dataname),
+                row=irow, col=icol
+            )
+        else:
+            fig.add_trace(
+            go.Scatter(x=data[0], y=data[1], mode='markers', marker=dict(size=8),line=dict(width=1),name=dataname),
+                row=irow, col=icol
+            )
+
+    elif plot_type == 'spark-hist':
         fig.add_trace(
-           go.Scatter(x=data[0], y=data[1], mode='markers', marker=dict(size=4),line=dict(width=1)),
+            go.Bar(x=data[0], y=data[1],name=dataname),
             row=irow, col=icol
         )
-        if len(labels) >=2:
-            fig.update_xaxes(type=xtype, title_text=labels[0], row=irow, col=icol)
-            fig.update_yaxes(type=ytype, title_text=labels[1], row=irow, col=icol)
+    
 
-    elif plot_type == 'sparck-hist':
-        fig.add_trace(
-            go.Bar(x=data[0], y=data[1]),
-            row=irow, col=icol
+    ### update axis info
+    if len(labels) >=2:
+        fig.update_xaxes(type=xtype, title_text=labels[0], row=irow, col=icol)
+        fig.update_yaxes(type=ytype, title_text=labels[1], row=irow, col=icol)
+
+
+    ### legend option
+    if legends is not None:
+        if len(legends) > 5:
+            fig.update_layout(
+                legend=dict(
+                    x=legends[0], y=legends[1],   
+                    xanchor=legends[2], yanchor=legends[3],
+                    orientation=legends[4]  
+                ),
+                margin=dict(r=legends[5])               
         )
-        if len(labels) >=2:
-            fig.update_xaxes(type=xtype, title_text=labels[0], row=irow, col=icol)
-            fig.update_yaxes(type=ytype, title_text=labels[1], row=irow, col=icol)
-
 
 def align_colorbar(fig, thickness=20, thicknessmode="pixels"):
     for trace in fig.data:
@@ -371,8 +395,7 @@ def align_colorbar(fig, thickness=20, thicknessmode="pixels"):
             xa = fig.layout[xaxis].domain
             ya = fig.layout[yaxis].domain
 
-            trace.update(colorbar=dict(thickness=20, thicknessmode="pixels", x=xa[1] + 0.01, y=(ya[0] + ya[1]) / 2, len=ya[1] - ya[0]))
-
+            trace.update(colorbar=dict(thickness=thickness, thicknessmode=thicknessmode, x=xa[1] + 0.01, y=(ya[0] + ya[1]) / 2, len=ya[1] - ya[0]))
 
 def build_event_and_find_pulse(input, output, dt, debug=False):
 

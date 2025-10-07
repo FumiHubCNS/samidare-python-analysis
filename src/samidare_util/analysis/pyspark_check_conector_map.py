@@ -89,11 +89,11 @@ def main(text):
 
     textdict = { "tpcid" : tpcs.ids , "chipid" : tpc_chip , "sampach" : tpc_channel}
 
-    # for i in range(len(pad2.ids)):
-    #     print(i, pad2.ids[i], padinfo.get_opopsite_id(i))
+    for i in range(len(pad2.ids)):
+        print(i, pad2.ids[i], padinfo.get_opopsite_id(i))
         
 
-    if 1:
+    if 0:
         cehck_list = tpcs.ids
         bins, colors = catview.get_color_list(cehck_list, cmap_name="rainbow", fmt="hex")
         color_array  = catview.get_color_array(cehck_list,bins,colors)
