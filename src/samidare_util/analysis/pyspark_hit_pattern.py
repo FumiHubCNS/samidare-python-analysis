@@ -861,6 +861,73 @@ def check_timing(df_plot6,  input_finename="", savebase=None, save_flag=False):
     if save_flag and savebase is not None:
         saveutil.save_plotly(fig, base_dir=savebase)
 
+def check_xpos_resolution(df,refz,  input_finename="", savebase=None, save_flag=False):
+
+    data = df.toPandas()
+    # .select("x_ug1", "x_ug2", "x_ug3", "x_dg1", "x_dg2", "x_dg3", "a_slope", "a_intercept")
+    # .withColumn("slope", F.lit(1.0) / F.col("a_slope"))
+    # .withColumn("intercept", F.lit(-1.0) * F.col("a_intercept") / F.col("a_slope"))
+                    # .filter( F.abs(F.col("slope")) < 0.05 )
+                    # .filter( F.abs(F.col("x_ug")) < 10. )
+
+    offset = -3.031088913245535
+    # pad1 = padinfo.get_tpc_info(offset+45)
+    # pad2 = padinfo.get_tpc_info(offset+136.5,False)
+    miniz1 = offset + 45.
+    miniz2 = offset + 136.5
+    SSRs = []
+    val = 0
+    diffz = []
+
+    
+    for i in range(len(data)):
+
+        if ( abs(data["slope"][i]) < 0.05 ) and ( abs(data["x_ug"][i]) < 10) :
+            val += ( ( ( data["slope"][i] * miniz1 + data["intercept"][i] ) - data["x_ug"][i] )**2 )
+            val += ( ( ( data["slope"][i] * miniz2 + data["intercept"][i] ) - data["x_dg"][i] )**2 )
+            # val += np.sqrt( ( ( data["slope"][i] * refz[0] + data["intercept"][i] ) - data["x_ug1"] )**2 )
+            # val += np.sqrt( ( ( data["slope"][i] * refz[1] + data["intercept"][i] ) - data["x_ug2"] )**2 )
+            # val += np.sqrt( ( ( data["slope"][i] * refz[2] + data["intercept"][i] ) - data["x_ug3"] )**2 )
+            # val += np.sqrt( ( ( data["slope"][i] * refz[3] + data["intercept"][i] ) - data["x_dg1"] )**2 )
+            # val += np.sqrt( ( ( data["slope"][i] * refz[4] + data["intercept"][i] ) - data["x_dg2"] )**2 )
+            # val += np.sqrt( ( ( data["slope"][i] * refz[5] + data["intercept"][i] ) - data["x_dg3"] )**2 )
+            SSRs.append(np.sqrt(val))
+            diffz.append(abs(data["x_ug"][i]-data["x_dg"][i]))
+
+            val = 0
+
+
+    
+        
+    fig = make_subplots(rows=2, cols=2, vertical_spacing=0.15, horizontal_spacing=0.1, subplot_titles=(f"Sum of RMS",))
+    counts, centers, edges = make_hist(SSRs, nbins=200, data_range=(-1, 4))
+    params, info = fit_gaussian( centers, counts, fit_range=(-20, 20) )
+    fitx = np.linspace(-20,20,400)  
+    fity = _gauss(fitx, params["A"], params["mu"], params["sigma"])
+    print(params["sigma"])
+
+    pau.add_sub_plot(fig,1,1,'spark-hist',[centers,counts],['SSR','Counts'],xrange=[100])
+    # pau.add_sub_plot(fig,1,1,'fit',[fitx, fity])
+
+    counts, centers, edges = make_hist(diffz, nbins=300, data_range=(-50, 50))
+    params, info = fit_gaussian( centers, counts, fit_range=(-20, 20) )
+    fitx = np.linspace(-20,20,400)  
+    fity = _gauss(fitx, params["A"], params["mu"], params["sigma"])
+    print(params["sigma"])
+    pau.add_sub_plot(fig,1,2,'spark-hist',[centers,counts],['SSR','Counts'],xrange=[100])
+    # pau.add_sub_plot(fig,1,2,'fit',[fitx, fity])
+    # pau.add_sub_plot(fig,1,1,'fit',[fitx, fity])
+    # pau.add_sub_plot(fig,1,2,'2d',[data["x_ug"], data["slope"]],['wighted x position (upstream) [mm]','slope'],[100,100],[False,False,False],xrange=[-20,20],yrange=[-1,1])
+    # pau.add_sub_plot(fig,2,1,'2d',[data["x_ug"], data["Qdiff"]],['wighted x position (upstream) [mm]',r'$\frac{Q_{1}+Q_{3}}{2} - Q_{2}$ [keV]'],[100,100],[False,False,False],xrange=[-20,20],yrange=[-20,20])
+    # pau.add_sub_plot(fig,2,2,'2d',[data["slope"], data["Qdiff"]],['slope',r'$\frac{Q_{1}+Q_{3}}{2} - Q_{2}$ [keV]'],[100,100],[False,False,False],xrange=[-1,1],yrange=[-20,20])
+    # pau.align_colorbar(fig)
+    fig.update_layout( height=700, width=1400, showlegend=False,title_text=f"{input_finename}")
+    fig.show()
+
+    if save_flag and savebase is not None:
+        saveutil.save_plotly(fig, base_dir=savebase)
+
+
 def csum(cond, expr):
     return F.sum(F.when(cond, expr).otherwise(F.lit(0.0)))
 
@@ -965,10 +1032,11 @@ def main(maxevt):
             )
         )
 
-    dft =  df_gid.select("energy_deposit_keV")
-    data = dft.toPandas()
-    plt.hist(data.energy_deposit_keV, bins=100)
-    plt.show()  
+    if 0:
+        dft =  df_gid.select("energy_deposit_keV")
+        data = dft.toPandas()
+        plt.hist(data.energy_deposit_keV, bins=100)
+        plt.show()  
 
     tpcs = get_pads()
     pad_rows = [(int(tid), float(c[0]), float(c[2])) for tid, c in zip(tpcs.ids, tpcs.centers)]
@@ -981,9 +1049,12 @@ def main(maxevt):
         .withColumn("is_up", (F.col("tpc_id").between(0, 59)).cast("int"))
         .withColumn("is_dn", (F.col("tpc_id") >= 60).cast("int"))
         .withColumn("is_al", (F.col("tpc_id").between(0, 119)).cast("int"))
-        .withColumn("is_up1", (F.col("tpc_id").between( 0, 19)).cast("int"))
-        .withColumn("is_up2", (F.col("tpc_id").between(20, 39)).cast("int"))
-        .withColumn("is_up3", (F.col("tpc_id").between(40, 59)).cast("int")) 
+        .withColumn("is_up1", (F.col("tpc_id").between( 0 ,  19)).cast("int"))
+        .withColumn("is_up2", (F.col("tpc_id").between(20 ,  39)).cast("int"))
+        .withColumn("is_up3", (F.col("tpc_id").between(40 ,  59)).cast("int")) 
+        .withColumn("is_dn1", (F.col("tpc_id").between(60 ,  79)).cast("int"))
+        .withColumn("is_dn2", (F.col("tpc_id").between(80 ,  99)).cast("int"))
+        .withColumn("is_dn3", (F.col("tpc_id").between(100, 119)).cast("int")) 
         .filter(F.col("is_al") == 1)   
     )
 
@@ -1005,6 +1076,14 @@ def main(maxevt):
             csum(F.col("is_up")==1, F.col("w")*F.col("x")).alias("Wx_up"),
             csum(F.col("is_dn")==1, F.col("w")*F.col("x")).alias("Wx_dn"),
 
+            csum(F.col("is_up1")==1, F.col("w")*F.col("x")).alias("Wx_up1"),
+            csum(F.col("is_up2")==1, F.col("w")*F.col("x")).alias("Wx_up2"),
+            csum(F.col("is_up3")==1, F.col("w")*F.col("x")).alias("Wx_up3"),
+
+            csum(F.col("is_dn1")==1, F.col("w")*F.col("x")).alias("Wx_dn1"),
+            csum(F.col("is_dn2")==1, F.col("w")*F.col("x")).alias("Wx_dn2"),
+            csum(F.col("is_dn3")==1, F.col("w")*F.col("x")).alias("Wx_dn3"),
+
             ccount(F.col("is_al")==1).alias("N_al"),
             ccount(F.col("is_up")==1).alias("N_up"),
             ccount(F.col("is_dn")==1).alias("N_dn"),
@@ -1012,6 +1091,13 @@ def main(maxevt):
             csum(F.col("is_al")==1, F.col("w")).alias("Q_al"),
             csum(F.col("is_up")==1, F.col("w")).alias("Q_up"),
             csum(F.col("is_dn")==1, F.col("w")).alias("Q_dn"),
+
+            csum(F.col("is_up1")==1, F.col("w")).alias("Q_up1"),
+            csum(F.col("is_up2")==1, F.col("w")).alias("Q_up2"),
+            csum(F.col("is_up3")==1, F.col("w")).alias("Q_up3"),
+            csum(F.col("is_dn1")==1, F.col("w")).alias("Q_dn1"),
+            csum(F.col("is_dn2")==1, F.col("w")).alias("Q_dn2"),
+            csum(F.col("is_dn3")==1, F.col("w")).alias("Q_dn3"),
 
             csum(F.col("is_al")==1, F.col("energy_deposit_keV")).alias("ΔE_al"),
             csum(F.col("is_up")==1, F.col("energy_deposit_keV")).alias("ΔE_up"),
@@ -1027,19 +1113,35 @@ def main(maxevt):
         .withColumn("ys",       F.expr("transform(hits, h -> double(h.y))"))
         .withColumn("zs",       F.expr("transform(hits, h -> double(h.z))"))
         .withColumn("energy_deposits_keV", F.expr("transform(hits, h -> double(h.e))"))
+
         .drop("hits")
+        
         .withColumn("x_ug", F.col("Wx_up") / F.nullif(F.col("Q_up"), F.lit(0.0)))
         .withColumn("x_dg", F.col("Wx_dn") / F.nullif(F.col("Q_dn"), F.lit(0.0)))
+
+        .withColumn("x_ug1", F.col("Wx_up1") / F.nullif(F.col("Q_up1"), F.lit(0.0)))
+        .withColumn("x_ug2", F.col("Wx_up2") / F.nullif(F.col("Q_up2"), F.lit(0.0)))
+        .withColumn("x_ug3", F.col("Wx_up3") / F.nullif(F.col("Q_up3"), F.lit(0.0)))
+        .withColumn("x_dg1", F.col("Wx_dn1") / F.nullif(F.col("Q_dn1"), F.lit(0.0)))
+        .withColumn("x_dg2", F.col("Wx_dn2") / F.nullif(F.col("Q_dn2"), F.lit(0.0)))
+        .withColumn("x_dg3", F.col("Wx_dn3") / F.nullif(F.col("Q_dn3"), F.lit(0.0)))
+
         .withColumn("y_offset", F.coalesce( F.expr("array_min(filter(ys, x -> x IS NOT NULL))"), F.lit(0.0) ))
+        
         .withColumn("ys0", F.expr("transform(ys, y -> CASE WHEN y IS NULL THEN NULL ELSE y - y_offset END)") )
+        
         .withColumn("zup", F.expr("filter(arrays_zip(tpc_ids, ys0), z -> z.tpc_ids BETWEEN 0 AND 59 AND z.ys0 IS NOT NULL)") )
         .withColumn("zdn", F.expr("filter(arrays_zip(tpc_ids, ys0), z -> z.tpc_ids >= 60 AND z.ys0 IS NOT NULL)") )
+        
         .withColumn("y_up_sum", F.expr("aggregate(zup, 0.0D, (acc, z) -> acc + z.ys0)"))
         .withColumn("y_dn_sum", F.expr("aggregate(zdn, 0.0D, (acc, z) -> acc + z.ys0)"))
+        
         .withColumn("y_up_n", F.size("zup"))
         .withColumn("y_dn_n", F.size("zdn"))
+        
         .withColumn("y_up_ns", F.when( F.col("y_up_n") > 0, (F.col("y_up_sum") / F.col("y_up_n")) * F.lit(1e6) ).otherwise(F.lit(None).cast("double")))
         .withColumn("y_dn_ns", F.when( F.col("y_dn_n") > 0, (F.col("y_dn_sum") / F.col("y_dn_n")) * F.lit(1e6) ).otherwise(F.lit(None).cast("double")))
+
         .drop("zup", "zdn", "y_up_sum", "y_dn_sum", "y_up_n", "y_dn_n")
     )
 
@@ -1119,6 +1221,54 @@ def main(maxevt):
                 )
         
         check_timing(df_plot6)
+
+    if 1:
+        refzs = []
+        sumz1,sumz2,sumz3,sumz4,sumz5,sumz6 = [],[],[],[],[],[]
+
+        for i in range(len(tpcs.ids)):
+            # print(tpcs.ids[i], tpcs.centers[i])
+
+            if tpcs.ids[i] <= 19:
+                sumz1.append(tpcs.centers[i][2])
+
+            elif tpcs.ids[i] <= 39:
+                sumz2.append(tpcs.centers[i][2])
+        
+            elif tpcs.ids[i] <= 59:
+                sumz3.append(tpcs.centers[i][2])
+            
+            elif tpcs.ids[i] <= 79:
+                sumz4.append(tpcs.centers[i][2])
+            
+            elif tpcs.ids[i] <= 99:
+                sumz5.append(tpcs.centers[i][2])
+
+            elif tpcs.ids[i] <= 119:
+                sumz6.append(tpcs.centers[i][2])
+
+        refzs.append(np.mean(sumz1))
+        refzs.append(np.mean(sumz2))
+        refzs.append(np.mean(sumz3))
+        refzs.append(np.mean(sumz4))
+        refzs.append(np.mean(sumz5))
+        refzs.append(np.mean(sumz6))
+
+        for i in range(len(refzs)):
+            print(i,refzs[i])
+
+        df_plot7 = (df_evt
+                    .filter( F.col("Q_up") < 30e3 )
+                    .filter( F.col("Q_dn") > 20e3 )
+                    .filter( F.col("N_dn") < 13 )
+                    .filter( F.col("N_up") < 13 )
+                    .select("x_ug1", "x_ug2", "x_ug3", "x_dg1", "x_dg2", "x_dg3", "a_slope", "a_intercept", "x_ug","x_dg")
+                    .withColumn("slope", F.lit(1.0) / F.col("a_slope"))
+                    .withColumn("intercept", F.lit(-1.0) * F.col("a_intercept") / F.col("a_slope"))
+                    )
+
+        check_xpos_resolution(df_plot7, refzs)
+
 
     if 0:
         print(f"Schema (df) input data")
