@@ -21,6 +21,7 @@ dependencies = [
     "click>=8.2.1",
     "toml>=0.10.2",
     "kaleido>=1.0.0",
+    "marimo-lib",
 ]
 
 [build-system]
@@ -32,3 +33,17 @@ packages = ["src/samidare_util"]
 
 [tool.uv.sources]
 catmlib = { git = "https://github.com/FumiHubCNS/catm-python-lib.git", rev = "main"}
+marimo-lib = { git = "https://github.com/FumiHubCNS/marimo-lib" }
+
+[dependency-groups]
+dev = [
+    "json5>=0.12.1",
+    "jupyterlab>=4.4.10",
+    "jupyterlab-lsp>=5.2.0",
+    "jupyterlab-rise>=0.43.1",
+    "marimo>=0.17.6",
+    "python-lsp-server[all]>=1.13.1",
+]
+
+[tool.marimo.runtime]
+output_max_bytes = 100_000_000
