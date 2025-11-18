@@ -1,5 +1,5 @@
 version = 1
-revision = 2
+revision = 3
 requires-python = ">=3.13"
 resolution-markers = [
     "python_full_version >= '3.14'",
@@ -21,16 +21,16 @@ wheels = [
 
 [[package]]
 name = "anywidget"
-version = "0.9.18"
+version = "0.9.21"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "ipywidgets" },
     { name = "psygnal" },
     { name = "typing-extensions" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/ed/69/20423d6abd2a57d767d20a9dcf3f816bd4cbbe4813ac7c7158ba16e44c3f/anywidget-0.9.18.tar.gz", hash = "sha256:262cf459b517a7d044d6fbc84b953e9c83f026790b2dd3ce90f21a7f8eded00f", size = 9808509, upload-time = "2025-03-23T20:01:22.358Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/be/5e/cbea445bf062b81e4d366ca29dae4f0aedc7a64f384afc24670e07bec560/anywidget-0.9.21.tar.gz", hash = "sha256:b8d0172029ac426573053c416c6a587838661612208bb390fa0607862e594b27", size = 390517, upload-time = "2025-11-12T17:06:03.035Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/2b/f0/09a30ca0551af20c7cefa7464b7ccb6f5407a550b83c4dcb15c410814849/anywidget-0.9.18-py3-none-any.whl", hash = "sha256:944b82ef1dd17b8ff0fb6d1f199f613caf9111338e6e2857da478f6e73770cb8", size = 220671, upload-time = "2025-03-23T20:01:21.057Z" },
+    { url = "https://files.pythonhosted.org/packages/5b/03/c17464bbf682ea87e7e3de2ddc63395e359a78ae9c01f55fc78759ecbd79/anywidget-0.9.21-py3-none-any.whl", hash = "sha256:78c268e0fbdb1dfd15da37fb578f9cf0a0df58a430e68d9156942b7a9391a761", size = 231797, upload-time = "2025-11-12T17:06:01.564Z" },
 ]
 
 [[package]]
@@ -284,7 +284,7 @@ css = [
 [[package]]
 name = "catmlib"
 version = "0.1.0"
-source = { git = "https://github.com/FumiHubCNS/catm-python-lib.git?rev=main#3ced8dd5dbe02f2da63064d7a4deabb2a3b4c000" }
+source = { git = "https://github.com/FumiHubCNS/catm-python-lib.git#3ced8dd5dbe02f2da63064d7a4deabb2a3b4c000" }
 dependencies = [
     { name = "iminuit" },
     { name = "matplotlib" },
@@ -1140,35 +1140,12 @@ wheels = [
 ]
 
 [[package]]
-name = "jupyterlab-mathjax3"
-version = "4.3.0"
-source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/e3/b6/18e44ef4ca8d74c7c239941c76acfd4b4127867893778ff4bd2691a6c9df/jupyterlab-mathjax3-4.3.0.tar.gz", hash = "sha256:daee13969453ecfa22ac8969cd1daa8f887731ace8adb93a574b47aecabdc5dd", size = 531559, upload-time = "2022-01-17T16:38:40.663Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/21/3f/9ac19d2883f58ba3ce14d34afcb993a6274154935b0bff4d75189b973d67/jupyterlab_mathjax3-4.3.0-py3-none-any.whl", hash = "sha256:07d2a40cea9293bb56210b87620088e6aa5bb45c05aac86d3e917d6c1aded711", size = 1061508, upload-time = "2022-01-17T16:38:26.488Z" },
-]
-
-[[package]]
 name = "jupyterlab-pygments"
 version = "0.3.0"
 source = { registry = "https://pypi.org/simple" }
 sdist = { url = "https://files.pythonhosted.org/packages/90/51/9187be60d989df97f5f0aba133fa54e7300f17616e065d1ada7d7646b6d6/jupyterlab_pygments-0.3.0.tar.gz", hash = "sha256:721aca4d9029252b11cfa9d185e5b5af4d54772bb8072f9b7036f4170054d35d", size = 512900, upload-time = "2023-11-23T09:26:37.44Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/b1/dd/ead9d8ea85bf202d90cc513b533f9c363121c7792674f78e0d8a854b63b4/jupyterlab_pygments-0.3.0-py3-none-any.whl", hash = "sha256:841a89020971da1d8693f1a99997aefc5dc424bb1b251fd6322462a1b8842780", size = 15884, upload-time = "2023-11-23T09:26:34.325Z" },
-]
-
-[[package]]
-name = "jupyterlab-rise"
-version = "0.43.1"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "jupyter-server" },
-    { name = "jupyterlab" },
-    { name = "jupyterlab-mathjax3" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/d3/e4/5d94cfdb93a6f0f9707a5d988b294e4c62d7944e0c77dba3e1a6a3389521/jupyterlab_rise-0.43.1.tar.gz", hash = "sha256:264ec00e2cb5cc68e2042a054eea2d42925f47f36d883eba9c475b6dd2fe87d3", size = 31528296, upload-time = "2024-12-31T09:34:47.349Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/5d/6b/ccc3f8d9940719b1d6c0c12aab9417d4008ff6aa419c8d103aa4c29ee3d1/jupyterlab_rise-0.43.1-py3-none-any.whl", hash = "sha256:62ba6d8c07a80dff293589512d57901029800a23a860904b14eb96d597cb8573", size = 16418327, upload-time = "2024-12-31T09:34:41.403Z" },
 ]
 
 [[package]]
@@ -1358,7 +1335,7 @@ wheels = [
 [[package]]
 name = "marimo-lib"
 version = "0.1.0"
-source = { git = "https://github.com/FumiHubCNS/marimo-lib#67b5a72c774c4c9aae82f8f3d6100db1ad84af10" }
+source = { git = "https://github.com/FumiHubCNS/marimo-lib#8e30ab4c5b3190cdba536f39f1b0717b6d03fbba" }
 dependencies = [
     { name = "json5" },
     { name = "marimo" },
@@ -2528,16 +2505,14 @@ wheels = [
 ]
 
 [[package]]
-name = "samidare-util"
+name = "samidare-python-analysis"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
     { name = "awkward" },
     { name = "awkward-pandas" },
-    { name = "catmlib" },
     { name = "click" },
     { name = "kaleido" },
-    { name = "marimo-lib" },
     { name = "matplotlib" },
     { name = "numpy" },
     { name = "pandas" },
@@ -2545,27 +2520,26 @@ dependencies = [
     { name = "pyarrow" },
     { name = "pyspark" },
     { name = "toml" },
-    { name = "uproot" },
 ]
 
 [package.dev-dependencies]
 dev = [
+    { name = "catmlib" },
     { name = "json5" },
     { name = "jupyterlab" },
     { name = "jupyterlab-lsp" },
-    { name = "jupyterlab-rise" },
     { name = "marimo" },
+    { name = "marimo-lib" },
     { name = "python-lsp-server", extra = ["all"] },
+    { name = "uproot" },
 ]
 
 [package.metadata]
 requires-dist = [
     { name = "awkward", specifier = ">=2.8.5" },
     { name = "awkward-pandas", specifier = ">=2023.8.0" },
-    { name = "catmlib", git = "https://github.com/FumiHubCNS/catm-python-lib.git?rev=main" },
     { name = "click", specifier = ">=8.2.1" },
     { name = "kaleido", specifier = ">=1.0.0" },
-    { name = "marimo-lib", git = "https://github.com/FumiHubCNS/marimo-lib" },
     { name = "matplotlib", specifier = ">=3.10.3" },
     { name = "numpy", specifier = ">=2.3.1" },
     { name = "pandas", specifier = ">=2.3.1" },
@@ -2573,17 +2547,18 @@ requires-dist = [
     { name = "pyarrow", specifier = ">=21.0.0" },
     { name = "pyspark", specifier = ">=4.0.0" },
     { name = "toml", specifier = ">=0.10.2" },
-    { name = "uproot", specifier = ">=5.6.3" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "catmlib", git = "https://github.com/FumiHubCNS/catm-python-lib.git" },
     { name = "json5", specifier = ">=0.12.1" },
     { name = "jupyterlab", specifier = ">=4.4.10" },
     { name = "jupyterlab-lsp", specifier = ">=5.2.0" },
-    { name = "jupyterlab-rise", specifier = ">=0.43.1" },
     { name = "marimo", specifier = ">=0.17.6" },
+    { name = "marimo-lib", git = "https://github.com/FumiHubCNS/marimo-lib" },
     { name = "python-lsp-server", extras = ["all"], specifier = ">=1.13.1" },
+    { name = "uproot", specifier = ">=5.6.8" },
 ]
 
 [[package]]
