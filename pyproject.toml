@@ -1,5 +1,5 @@
 [project]
-name = "samidare_python_analysis"
+name = "samidare-util"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"

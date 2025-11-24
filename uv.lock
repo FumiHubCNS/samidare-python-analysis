@@ -2505,7 +2505,7 @@ wheels = [
 ]
 
 [[package]]
-name = "samidare-python-analysis"
+name = "samidare-util"
 version = "0.1.0"
 source = { editable = "." }
 dependencies = [
