@@ -1,3 +1,10 @@
-from .detector.padinfo import get_tpc_info
+from . import analysis
+from . import decoder
+from . import detector
 
-__all__ = ['get_tpc_info']
+
+__all__ = [
+	'analysis',
+	'decoder',
+	'detector',
+]
