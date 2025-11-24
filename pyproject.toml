@@ -27,7 +27,7 @@ build-backend = "hatchling.build"
 
 [dependency-groups]
 dev = [
-    "catmlib",
+    "catm-lib",
     "json5>=0.12.1",
     "jupyterlab>=4.4.10",
     "jupyterlab-lsp>=5.2.0",
@@ -42,4 +42,4 @@ output_max_bytes = 100_000_000
 
 [tool.uv.sources]
 marimo-lib = { git = "https://github.com/FumiHubCNS/marimo-lib" }
-catmlib = { git = "https://github.com/FumiHubCNS/catm-python-lib.git" }
+catm-lib = { git = "https://github.com/FumiHubCNS/catm-lib" }
