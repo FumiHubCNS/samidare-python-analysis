@@ -20,7 +20,7 @@ import plotly.express as px
 import plotly.graph_objs as go
 from plotly.subplots import make_subplots
 from pyspark.sql import SparkSession, functions as F, types as T
-import samidare_util.decoder.pyspark_pulse_analysis_version2 as pau
+import samidare_lib.decoder.pyspark_pulse_analysis_version2 as pau
 from itertools import islice
 import matplotlib.pyplot as plt
 from statistics import mode
@@ -28,7 +28,7 @@ import numpy as np
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
 from typing import Iterable, Union, List, Tuple
-import samidare_util.analysis.savefig_util as saveutil
+import samidare_lib.analysis.savefig_util as saveutil
 from collections import Counter
 
 this_file_path = pathlib.Path(__file__).parent

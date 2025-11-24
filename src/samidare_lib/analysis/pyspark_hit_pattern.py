@@ -25,15 +25,15 @@ from plotly.subplots import make_subplots
 from math import isfinite
 from typing import Sequence, Tuple, Dict, Any
 
-import catmlib as cat
-import catmlib.util.catmviewer as catview
-import samidare_util.decoder.pyspark_pulse_analysis_version2 as pau
-import samidare_util.analysis.savefig_util as saveutil
+import catm_lib as cat
+import catm_lib.util.catmviewer as catview
+import samidare_lib.decoder.pyspark_pulse_analysis_version2 as pau
+import samidare_lib.analysis.savefig_util as saveutil
 
 this_file_path = pathlib.Path(__file__).parent
 sys.path.append(str(this_file_path.parent.parent.parent / "src"))
 
-import samidare_util.detector.padinfo as padinfo
+import samidare_lib.detector.padinfo as padinfo
 
 def common_options(func):   
     @click.option('--maxevt'  , '-m'  , type=int, default=-1, help='maximum load row number')

@@ -7,7 +7,7 @@
 """
 import argparse
 import pathlib
-import samidare_util.padinfo as pinfo
+import samidare_lib.padinfo as pinfo
 import numpy as np
 import pandas as pd
 from pyspark.sql import SparkSession

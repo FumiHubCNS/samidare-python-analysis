@@ -17,8 +17,8 @@ from plotly.subplots import make_subplots
 import plotly.graph_objects as go
 from collections import Counter
 import time
-import catmlib as cat
-import samidare_util as tw
+import catm_lib as cat
+import samidare_lib as tw
 
 this_file_path = pathlib.Path(__file__).parent
 

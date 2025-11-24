@@ -28,7 +28,7 @@ import numpy as np
 import matplotlib.cm as cm
 import matplotlib.colors as mcolors
 from itertools import islice
-import samidare_util.decoder.binary_dumper_version3 as bd
+import samidare_lib.decoder.binary_dumper_version3 as bd
 
 this_file_path = pathlib.Path(__file__).parent
 sys.path.append(str(this_file_path.parent.parent.parent / "src"))

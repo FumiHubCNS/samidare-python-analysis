@@ -14,8 +14,8 @@ import sys
 this_file_path = pathlib.Path(__file__).parent
 sys.path.append(str(this_file_path.parent.parent.parent / "src"))
 
-import samidare_util.decoder.samidare_decorder_version2 as samidare_decoder
-import samidare_util.decoder.pyspark_pulse_analysis_version2 as pulse_analysis
+import samidare_lib.decoder.samidare_decorder_version2 as samidare_decoder
+import samidare_lib.decoder.pyspark_pulse_analysis_version2 as pulse_analysis
 
 def common_options(func):
     # @click.option('--name', '-n', default='World', show_default=True, help='Your name')

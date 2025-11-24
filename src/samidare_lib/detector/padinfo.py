@@ -7,10 +7,10 @@
 """
 import argparse
 import pathlib
-import catmlib as cat
+import catm_lib as cat
 import numpy as np
 import copy
-import catmlib.util.catmviewer as catview
+import catm_lib.util.catmviewer as catview
 from math import isclose, isnan
 from typing import Sequence, Union, Optional
 

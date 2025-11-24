@@ -1,5 +1,5 @@
 import numpy as np
-import samidare_util.decoder.binary_dumper_version3 as test
+import samidare_lib.decoder.binary_dumper_version3 as test
 
 if __name__ == '__main__':
 

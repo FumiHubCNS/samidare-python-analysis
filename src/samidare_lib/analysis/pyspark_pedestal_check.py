@@ -14,8 +14,8 @@ import numpy as np
 import os
 from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
-import samidare_util.decoder.pyspark_pulse_analysis_version2 as pau
-import samidare_util.analysis.pyspark_hit_pattern as hit
+import samidare_lib.decoder.pyspark_pulse_analysis_version2 as pau
+import samidare_lib.analysis.pyspark_hit_pattern as hit
 from plotly.subplots import make_subplots
 import plotly.io as pio
 pio.renderers.default = "browser"

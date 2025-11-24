@@ -13,7 +13,7 @@ import sys
 import pandas as pd
 import numpy as np
 from pyspark.sql import SparkSession
-import catmlib.util.catmviewer as catview
+import catm_lib.util.catmviewer as catview
 import plotly.express as px
 import plotly.graph_objs as go
 from plotly.subplots import make_subplots
@@ -22,8 +22,8 @@ from plotly.subplots import make_subplots
 this_file_path = pathlib.Path(__file__).parent
 sys.path.append(str(this_file_path.parent.parent.parent / "src"))
 
-import samidare_util.detector.padinfo as padinfo
-import samidare_util.decoder.pyspark_pulse_analysis_version2 as pau
+import samidare_lib.detector.padinfo as padinfo
+import samidare_lib.decoder.pyspark_pulse_analysis_version2 as pau
 
 def fit_line(x, z):
     x = np.array(x)
