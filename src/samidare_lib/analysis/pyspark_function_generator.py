@@ -137,9 +137,9 @@ def get_parquet_data(
     # rows = agg2.orderBy("chip", "channel").collect()
 
     # #   2) 先頭の timing でソートしたい場合
-    # agg2b = agg2.withColumn("t0", F.element_at("timings", 1)).orderBy("t0")
+    agg2b = agg2.withColumn("t0", F.element_at("timings", 1)).orderBy("t0")
 
-    return agg2, input_finename
+    return agg2b, input_finename
 
 def trim_and_convert_ms_to_ns_np(
     values_ms: Iterable[float],
