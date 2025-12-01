@@ -34,6 +34,7 @@ this_file_path = pathlib.Path(__file__).parent
 sys.path.append(str(this_file_path.parent.parent.parent / "src"))
 
 def common_options(func):
+    @click.option('--clock'   , '-k'  , type=float, default=320., help='clock [MHz]')
     @click.option('--rise'    , '-r'  , type=int, default=50, help='rising thresold')
     @click.option('--fall'    , '-f'  , type=int, default=10, help='falling thresold')
     @click.option('--pren'    , '-b'  , type=int, default=10, help='number of pre sample')
@@ -347,7 +348,7 @@ def dumps_pretty_inline_arrays(obj, inline=('timestamp','sample_index')):
 
 @click.command(context_settings=dict(help_option_names=['-h', '--help']))
 @common_options
-def main(rise, fall, pren, postn, minlen, maxevt, checkts, checkpf, duration, save, refch, file, dir):
+def main(clock, rise, fall, pren, postn, minlen, maxevt, checkts, checkpf, duration, save, refch, file, dir):
 
     toml_file_path = this_file_path  / "../../../parameters.toml"
 
@@ -432,9 +433,11 @@ def main(rise, fall, pren, postn, minlen, maxevt, checkts, checkpf, duration, sa
         .drop("chip").withColumnRenamed("chip_from_udf", "chip") # 必要ならUDFのchipを採用
     )
 
+    c_timestamp = clock * 1e3
+
     df_plot = (
         df_pulses
-        .withColumn("t0_ms", F.element_at("pulse_timestamp", 1).cast("double")/F.lit(320000.0))
+        .withColumn("t0_ms", F.element_at("pulse_timestamp", 1).cast("double")/F.lit(c_timestamp))
         # .withColumn("t0_ms", F.element_at("pulse_timestamp", 1)/F.lit(32.00) * F.lit(3.125) / F.lit(1e6))
         .where(F.col("t0_ms").isNotNull())
         .select("chip", "channel", "t0_ms", "pulse", "pulse_index", "pulse_timestamp","original_pulse","samples_value")  # ← ここで保持

@@ -42,6 +42,104 @@ from typing import Iterable, Optional, List
 this_file_path = pathlib.Path(__file__).parent
 sys.path.append(str(this_file_path.parent.parent.parent / "src"))
 
+def get_parquet_data(
+    filename: str = None,
+    N: int = 1000,
+    clock: float = 320. 
+
+):
+    toml_file_path = this_file_path / "../../../parameters.toml"
+    with open(toml_file_path, "r") as f:
+        config = toml.load(f)
+
+    fileinfo = config["fileinfo"]
+
+    if filename is not None:
+        base_path = fileinfo["base_output_path"] + "/" + filename
+    else:
+        base_path = fileinfo["base_output_path"] + "/" + fileinfo["input_file_name"] 
+
+    input = base_path + "_event.parquet"
+    input_finename = os.path.basename(input)
+ 
+    spark = (
+        SparkSession.builder
+        .config("spark.driver.memory", "8g")
+        .config("spark.sql.execution.arrow.maxRecordsPerBatch", "128") 
+        .config("spark.sql.parquet.enableVectorizedReader", "false")
+        .config("spark.sql.files.maxPartitionBytes", 32 * 1024 * 1024)
+        .getOrCreate()
+    )
+
+    df = spark.read.parquet(input)    
+
+    # 1) 欲しい (chip, channel) の全ペアを作る（128行）
+    pairs = [(c, ch) for c in range(4) for ch in range(32)]
+    pairs_df = spark.createDataFrame(pairs, "chip long, channel long")
+
+    # 2) 元データから必要な列だけ（例）
+    base = df.select("chip","channel","t0_ms","pulse","pulse_timestamp")
+
+    # 3) 実在するペアだけに絞り込む（pairsに含まれて、かつbaseに実在する行のみ）
+    #    → pairs_df との inner join でOK（存在しないペアは落ちる）
+    filtered = (
+        base.join(F.broadcast(pairs_df), on=["chip","channel"], how="inner")
+    )
+
+    # 4) 各 (chip,channel) で N 件だけ取得（完全分散、順序は t0_ms 例）
+    c_timestamp = clock * 1e3
+    w = W.partitionBy("chip","channel").orderBy("t0_ms")
+    df_limited = (
+        filtered
+        .withColumn("rn", F.row_number().over(w))
+        .withColumn("maxsample", F.array_max(F.col("pulse")).cast("double")) 
+        .withColumn("maxsample_index_raw", F.array_position(F.col("pulse"), F.array_max(F.col("pulse"))))
+        .withColumn("maxsample_index", F.when(F.col("maxsample_index_raw") <= 0, F.lit(None).cast("int")).otherwise(F.col("maxsample_index_raw").cast("int")))
+        .withColumn("maxsample_timing_ms", (F.element_at(F.col("pulse_timestamp"), F.col("maxsample_index")) / F.lit(c_timestamp)).cast("double"))
+        .where(F.col("rn") <= N)
+        .drop("rn")
+    )
+
+    # 事前にヌル除去（配列に None を混ぜない）
+    df_clean = df_limited.where(
+        F.col("maxsample_timing_ms").isNotNull() & F.col("maxsample").isNotNull()
+    )
+
+    # ヌル除去済み df_clean: (chip, channel, maxsample_timing_ms, maxsample, ...)
+    agg = (
+        df_clean
+        .groupBy("chip", "channel")
+        .agg(
+            # time でソートするため、(t, m) の struct を collect してから sort_array
+            F.sort_array(
+                F.collect_list(
+                    F.struct(
+                        F.col("maxsample_timing_ms").alias("t"),
+                        F.col("maxsample").alias("m")
+                    )
+                )
+            ).alias("pairs"),
+            F.count("*").alias("n")
+        )
+    )
+
+    # pairs から timings / maxsamples を取り出す
+    agg2 = (
+        agg
+        .withColumn("timings",    F.expr("transform(pairs, x -> x.t)"))
+        .withColumn("maxsamples", F.expr("transform(pairs, x -> x.m)"))
+        .drop("pairs")
+    )
+
+    # # （任意）rows 自体の並びもソートしたいなら：
+    # #   1) chip,channel の順
+    # rows = agg2.orderBy("chip", "channel").collect()
+
+    # #   2) 先頭の timing でソートしたい場合
+    # agg2b = agg2.withColumn("t0", F.element_at("timings", 1)).orderBy("t0")
+
+    return agg2, input_finename
+
 def trim_and_convert_ms_to_ns_np(
     values_ms: Iterable[float],
     lo_ms: Optional[float] = None,
