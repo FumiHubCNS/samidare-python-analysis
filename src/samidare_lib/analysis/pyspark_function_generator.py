@@ -59,7 +59,7 @@ def get_parquet_data(
     else:
         base_path = fileinfo["base_output_path"] + "/" + fileinfo["input_file_name"] 
 
-    input = base_path + "_event.parquet"
+    input = base_path + "_pulse.parquet"
     input_finename = os.path.basename(input)
  
     spark = (
