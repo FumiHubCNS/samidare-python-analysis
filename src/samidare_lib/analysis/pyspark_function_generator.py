@@ -43,12 +43,13 @@ this_file_path = pathlib.Path(__file__).parent
 sys.path.append(str(this_file_path.parent.parent.parent / "src"))
 
 def get_parquet_data(
+    toml_file_base_path:str | None = None,
     filename: str = None,
     N: int = 1000,
     clock: float = 320. 
 
 ):
-    toml_file_path = this_file_path / "../../../parameters.toml"
+    toml_file_path = this_file_path / "../../../parameters.toml" if toml_file_base_path is None else toml_file_base_path
     with open(toml_file_path, "r") as f:
         config = toml.load(f)
 
